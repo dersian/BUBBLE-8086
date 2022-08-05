@@ -462,6 +462,7 @@ PROC hitDetection
 		;sub ecx, 2
 		;call hitDetection, ecx
 		jmp @@done
+		;test
 
 	
 	@@done:
