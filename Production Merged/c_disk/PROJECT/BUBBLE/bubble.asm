@@ -309,7 +309,11 @@ PROC updateArray
 			jmp @@left_sideways
 
 	@@done:
-		call hitDetection, edi ; check if the surrounding balls are hit (edi = position of newly played ball)
+		; use edi as global counter for hit detection -> clear it before entering function 
+		xor ecx, ecx
+		mov ecx, edi 
+		xor edi, edi
+		call hitDetection, ecx ; check if the surrounding balls are hit (edi = position of newly played ball)
 		ret
 ENDP updateArray
 
@@ -402,7 +406,7 @@ PROC hitDetection
 	
 	; check the type of balls right, left and up right and up left
 	xor eax, eax
-	xor edi, edi ; edi = removed ball counter
+	;xor edi, edi ; edi = recursive tracker
 	jmp @@right_ball 
 
 	@@right_ball:
@@ -432,10 +436,10 @@ PROC hitDetection
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
 		je @@remove
-		jmp @@done
+		jmp @@check_current_ball
 
 	@@remove:
-		inc edi
+		;inc edi
 		call removeBall, ecx
 		cmp eax, 1 ; eax = 1? we checked the right ball -> go to left
 		je @@left_ball
@@ -446,24 +450,51 @@ PROC hitDetection
 		jmp @@check_current_ball
 
 	@@check_current_ball: ; check if we have to remove the current ball
-		cmp edi, 2 ; remove ball if removedball counter is > 1
-		jl @@done ; skip is less than 2
+		;cmp edi, 2 ; remove ball if removedball counter is > 1
+		;jl @@done ; skip if less than 2
 		call removeBall, [@@hitpos]
 		jmp @@recursive
 	
 	@@recursive:
-		;mov ecx, [@@hitpos]
-		;add ecx, 2
-		;call hitDetection, ecx
-		;sub ecx, 4
-		;call hitDetection, ecx
-		;sub ecx, 30
-		;call hitDetection, ecx
-		;sub ecx, 2
-		;call hitDetection, ecx
+		mov ecx, [@@hitpos]
+		inc edi  
+		cmp edi, 1 ; check right ball
+		je @@check_right
+		cmp edi, 2 ; check left ball
+		je @@check_left
+		cmp edi, 3 ; check upper right ball
+		je @@check_upper_right
+		cmp edi, 4 ; check upper left ball
+		je @@check_upper_left
 		jmp @@done
-		;test
+		
+		@@check_right:
+			add ecx, 2
+			;push bp
+			call hitDetection, ecx
+			;pop bp
+			jmp @@recursive
+		
+		@@check_left:
+			sub ecx, 4
+			;push bp
+			call hitDetection, ecx
+			;pop bp
+			jmp @@recursive
 
+		@@check_upper_right:	
+			sub ecx, 30
+			;push bp
+			call hitDetection, ecx
+			;pop bp
+			jmp @@recursive
+		
+		@@check_upper_left:
+			sub ecx, 2
+			;push bp
+			call hitDetection, ecx
+			;pop bp
+			jmp @@recursive
 	
 	@@done:
 		ret
