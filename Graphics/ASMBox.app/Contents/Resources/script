@@ -1,0 +1,3 @@
+#!/bin/bash
+
+../../../dosbox/DOSBox.app/Contents/MacOS/DOSBox -c "mount c ../../../c_disk" -c "imgmount Y ../../../dosbox/asm_dev_disk.iso -t iso" -c "Y:\UTILS\DOSBOX\INIT.BAT Y" -conf ../../../dosbox/dosbox.conf
