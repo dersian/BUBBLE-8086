@@ -11,7 +11,7 @@ CODESEG
 	
 PROC printUnsignedInteger
 	ARG	@@printval:dword    ; input argument
-	USES eax, ebx, ecx, edx
+	USES eax, ebx, ecx, edx ;test
 
 	mov eax, [@@printval]
 	mov	ebx, 10		; divider
