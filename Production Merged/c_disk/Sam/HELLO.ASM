@@ -9,7 +9,7 @@ ARR_Y equ 10
 
 CODESEG		
 	
-PROC printUnsignedInteger
+PROC printUnsignedInteger ;used in printInList, prints 1 integer passsed trough with an array
 	ARG	@@printval:dword    ; input argument
 	USES eax, ebx, ecx, edx ;test
 
@@ -37,7 +37,7 @@ PROC printUnsignedInteger
 	ret
 ENDP printUnsignedInteger
 
-PROC printIntList
+PROC printIntList ;Prints array using arrayptr
 	ARG	@@arrayptr:dword
 	USES eax, ebx, ecx, edx
 	
@@ -62,14 +62,15 @@ PROC printIntList
 ENDP
 
 PROC update2
-	ARG	@@arrayptr:dword , @@color1:dword
+	ARG	@@arrayptr:dword , @@color1:dword, @@color2:dword
 	USES eax, ebx, ecx, edx, esi, edi
-
-	xor edx, edx  ;ctr for inner
+	
 	xor eax, eax  ;ctr for outer
+	mov ebx, [@@arrayptr]	; pointer
+	xor edx, edx  ;ctr for inner
 	xor esi, esi  ;ctr for alternating 1 0
 	xor edi, edi  ;ctr for alternating offset
-	mov ebx, [@@arrayptr]	; pointer
+
 	
 	;jmp @@inner
 	
@@ -80,7 +81,6 @@ PROC update2
 		cmp eax, ARR_Y + 1
 		je @@done
 		
-
 		cmp edi, 2  ;time for offset
 		je @@blockoffset
 
@@ -91,9 +91,8 @@ PROC update2
 		
 		add ebx, 4
 		cmp esi, 0
-		je @@addOne
-		
-		
+		je @@addColor
+				
 		xor esi, esi
 		inc edx
 		jmp @@inner
@@ -107,12 +106,13 @@ PROC update2
 		xor edi, edi
 		jmp @@inner
 
-	@@addOne:
+	@@addColor:
 		mov ecx, [dword ptr @@color1]
-		mov [ebx], ecx
+		mov [ebx], ecx ;update array
 		inc esi
 		inc edx
 		jmp @@inner
+	
 
 	@@done:
 		ret
@@ -122,7 +122,7 @@ PROC main
 	sti
 	cld
 
-	call update2, offset arrlen, [color]
+	call update2, offset arrlen, [color1], [color2]
 	;call bubbleSort, offset arrlen
 	call printIntList, offset arrlen
 
@@ -143,7 +143,8 @@ DATASEG
 	;arrdata dd 0, 1, 6, 3, 4
 
 	arrdata dd ARR_LEN dup (?) ;empty array with length 5
-	color dd 6
+	color1 dd 2
+	color2 dd 3
 
 
 ; -------------------------------------------------------------------
