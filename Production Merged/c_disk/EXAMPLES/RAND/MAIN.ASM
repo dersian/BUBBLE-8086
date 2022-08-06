@@ -61,7 +61,7 @@ PROC main
 
     mov     ecx, 100
 @@loopke:
-    call    rand
+    call    rand16
     call    printInt, eax
     mov     ah, 9
     mov     edx, offset newline

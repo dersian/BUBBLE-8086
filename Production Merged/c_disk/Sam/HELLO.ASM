@@ -7,8 +7,49 @@ ARR_LEN equ 400
 ARR_X equ 40
 ARR_Y equ 10
 
+RAND_A = 1103515245
+RAND_C = 12345
+
+
 CODESEG		
+
+PROC rand_init
+    USES    eax, ecx, edx
+
+    mov     ah, 02ch        ; Get system time
+    int     21h
+
+    mov     ax, dx          ; Use time to generate seed in EAX
+    shl     eax, 16
+    mov     ax, cx
+
+    mov     ah, 02ah        ; Get system date
+    int     21h
+
+    shl     ecx, 16         ; Mangle date into the seed in EAX
+    mov     cx, dx
+    xor     eax, ecx
+    
+    mov     [rand_seed], eax
+
+    ret
+ENDP rand_init
+
+
+PROC rand16
+    USES    edx
+
+    mov     eax, [rand_seed]
+    mov     edx, RAND_A
+    mul     edx
+    add     eax, RAND_C
+    mov     [rand_seed], eax
+	shr		eax, 30
+    inc eax
 	
+    ret
+ENDP rand16
+
 PROC printUnsignedInteger ;used in printInList, prints 1 integer passsed trough with an array
 	ARG	@@printval:dword    ; input argument
 	USES eax, ebx, ecx, edx ;test
@@ -61,19 +102,80 @@ PROC printIntList ;Prints array using arrayptr
 	ret
 ENDP
 
+;PROC DrawStartGrid ;calls DrawColor
+;	ARG	@@arrayptr:dword , @@color1:dword, @@color2:dword, @@shiftedRow:dword
+;	USES eax, edi
+;	@@forEveryLine:
+;		inc eax
+;		mov edi, [dword ptr @@shiftedrow] ;should we shift this Row?
+;		cmp eax, ARR_Y + 1
+;		je @@done
+;		
+;		call DrawLine offset arrlen, [color1], [color2], [shiftedRow]
+;	
+;	@@done:
+;		ret
+
+;ENDP DrawStartGrid
+
+PROC DrawLine ;Adds 1 horizontal line to the array
+	USES ecx, edx, esi, edi
+		
+	xor edx, edx  ;ctr for inner
+	xor esi, esi  ;ctr for alternating 1 0
+	xor edi, edi  ;ctr for alternating offset
+	add ebx, 4
+
+	@@inner:	   
+		cmp edx, ARR_X 
+		je @@done
+		
+		add ebx, 4
+		cmp esi, 0
+		je @@addColor
+				
+		xor esi, esi
+		inc edx
+		jmp @@inner
+	
+	@@noOffset:
+		mov esi, 0
+		jmp @@inner
+	
+	@@blockoffset:
+		mov esi, 1
+		xor edi, edi
+		jmp @@inner
+
+	@@addColor:
+		mov ecx, 2
+		mov [ebx], ecx ;update array
+		inc esi
+		inc edx
+		jmp @@inner
+	
+	@@done:
+		ret
+
+ENDP DrawLine
+
+PROC storePTR
+	ARG	@@arrayptr:dword
+	USES ebx
+		xor ebx, ebx
+		mov ebx, [@@arrayptr]	;pointer
+ENDP storePTR
+
 PROC update2
 	ARG	@@arrayptr:dword , @@color1:dword, @@color2:dword
 	USES eax, ebx, ecx, edx, esi, edi
 	
 	xor eax, eax  ;ctr for outer
-	mov ebx, [@@arrayptr]	; pointer
+	mov ebx, [@@arrayptr] ;pointer
 	xor edx, edx  ;ctr for inner
 	xor esi, esi  ;ctr for alternating 1 0
 	xor edi, edi  ;ctr for alternating offset
 
-	
-	;jmp @@inner
-	
 	@@outer: 
 		xor edx, edx  ;ctr for inner
 		inc eax
@@ -107,7 +209,8 @@ PROC update2
 		jmp @@inner
 
 	@@addColor:
-		mov ecx, [dword ptr @@color1]
+		call addColor
+		
 		mov [ebx], ecx ;update array
 		inc esi
 		inc edx
@@ -117,15 +220,27 @@ PROC update2
 	@@done:
 		ret
 ENDP update2
+
+PROC addColor
+	uses eax
 	
+	call    rand16
+
+	mov ecx, eax
+
+	ret
+ENDP addColor
+	
+
 PROC main
 	sti
 	cld
+	
+	call rand_init
 
 	call update2, offset arrlen, [color1], [color2]
-	;call bubbleSort, offset arrlen
+	;call update2, offset arrlen, [color2], [color1]
 	call printIntList, offset arrlen
-
 
 	mov ah,0h		; wait for keystroke
     int 16h
@@ -138,11 +253,12 @@ ENDP main
 ; -------------------------------------------------------------------
 DATASEG
 	
-	
+	rand_seed   dd ?
 	arrlen dd ARR_LEN
 	;arrdata dd 0, 1, 6, 3, 4
 
 	arrdata dd ARR_LEN dup (?) ;empty array with length 5
+	shiftedRow dd 0
 	color1 dd 2
 	color2 dd 3
 
