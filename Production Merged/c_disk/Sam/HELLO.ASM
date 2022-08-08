@@ -3,6 +3,8 @@ P386
 MODEL FLAT, C
 ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
+INCLUDE "keyb.inc"
+
 ARR_LEN equ 800
 ARR_X equ 40
 ARR_Y equ 20
@@ -171,15 +173,24 @@ ENDP addColor
 PROC main
 	sti
 	cld
-	
+
 	call rand_init
-
+	call __keyb_installKeyboardHandler
+	
+	@@goAgain:
 	call StartGrid, offset arrlen, [color1], [color2]
-	;call update2, offset arrlen, [color2], [color1]
 	call printIntList, offset arrlen
+	
+	@@loopje:
+	mov al, [__keyb_rawScanCode] ;last pressed key
+	cmp al, 02h
+	je @@goAgain
+	cmp al, 01h
+	jne @@loopje
 
-	mov ah,0h		; wait for keystroke
-    int 16h
+	call __keyb_uninstallKeyboardHandler
+
+
 	mov	ax,4C00h 	; terminate
 	int 21h
 ENDP main
@@ -191,9 +202,8 @@ DATASEG
 	
 	rand_seed   dd ?
 	arrlen dd ARR_LEN
-	;arrdata dd 0, 1, 6, 3, 4
-
-	arrdata dd ARR_LEN dup (?) ;empty array with length 5
+	
+	arrdata dd ARR_LEN dup (?) ;empty array with length ARR_LEN
 	shiftedRow dd 0
 	color1 dd 2
 	color2 dd 3
