@@ -26,7 +26,7 @@ BALL_XSTART EQU 64
 BALL_YSTART EQU 5
 
 SHOOTBALL_STARTPOS EQU 496 ; Absolute startpos
-SHOOTBALL_STARTX EQU 25 ; Xcord of startpos
+SHOOTBALL_STARTX EQU 15 ; Xcord of startpos
 
 INCLUDE "keyb.inc" 
 
@@ -239,84 +239,6 @@ ENDP drawBall
 ; -------------------------------------------------------------------
 ; ARRAY/UPDATE PROCEDURES
 ; -------------------------------------------------------------------
-; update ARRAY with corresponding path per timer count (simple ball movement)
-PROC updateArray
-	ARG @@arr:dword, @@path:dword
-	USES edx, eax, ebx, ecx, esi, edi
-
-	mov esi, [@@arr] ; store array
-	mov edi, SHOOTBALL_STARTPOS ; load in start position of the shooting ball
-	mov ebx, [@@path] ; load in given path
-	xor ecx, ecx
-	xor eax, eax
-
-	; movement orientation
-	cmp ebx, SHOOTBALL_STARTX ; 1 left from center
-	je @@up ; ebx = 16? -> recht naar boven
-	jg @@right ; ebx > 16? -> rechts
-	jmp @@left ; ebx < 16? -> links
-	
-	@@up:
-		call drawBackground, offset buffer, offset bgframe 
-		call timer, 8
-		inc ecx ; increase loop counter
-		mov [dword ptr (esi + edi*4)], 0 
-		sub edi, 32 
-		mov [dword ptr (esi + edi*4)], 1 
-		call decodeArray, [dword ptr esi] 
-		call refreshVideo
-		cmp ecx, 7
-		je @@done
-		jmp @@up
-
-	@@right:
-		;calculate amount of steps to take, #steps=counter(ecx)
-		mov ecx, SHOOTBALL_STARTX ; 
-		sub ebx, ecx
-		mov ecx, ebx
-		; start with sideways movement
-		jmp @@right_sideways
-		
-		@@right_sideways:
-			call drawBackground, offset buffer, offset bgframe 
-			call timer, 8
-			mov [dword ptr (esi + edi*4)], 0 
-			add edi, 1
-			mov [dword ptr (esi + edi*4)], 1 
-			call decodeArray, [dword ptr esi] 
-			call refreshVideo
-			dec ecx
-			cmp ecx, 0
-			je @@up
-			jmp @@right_sideways
-
-	@@left:
-		mov ecx, SHOOTBALL_STARTX ; 
-		sub ecx, ebx
-		jmp @@left_sideways
-		
-		@@left_sideways:
-			call drawBackground, offset buffer, offset bgframe 
-			call timer, 8
-			mov [dword ptr (esi + edi*4)], 0 
-			sub edi, 1
-			mov [dword ptr (esi + edi*4)], 1 
-			call decodeArray, [dword ptr esi] 
-			call refreshVideo
-			dec ecx
-			cmp ecx, 0
-			je @@up
-			jmp @@left_sideways
-
-	@@done:
-		; use edi as global counter for hit detection -> clear it before entering function 
-		xor ecx, ecx
-		mov ecx, edi 
-		xor edi, edi
-		call hitDetection, ecx ; check if the surrounding balls are hit (edi = position of newly played ball)
-		ret
-ENDP updateArray
-
 ; decode ARRAY
 PROC decodeArray
 	ARG @@arr:dword
@@ -379,6 +301,150 @@ PROC decodeArray
 		ret
 ENDP decodeArray
 
+; update ARRAY with corresponding path per timer count (simple ball movement)
+PROC updateArray
+	ARG @@arr:dword, @@path:dword
+	USES edx, eax, ebx, ecx, esi, edi
+
+	mov esi, [@@arr] ; store array
+	mov edi, SHOOTBALL_STARTPOS ; load in start position of the shooting ball
+	mov ebx, [@@path] ; load in given path
+	xor ecx, ecx
+	xor eax, eax
+
+	; movement orientation
+	cmp ebx, SHOOTBALL_STARTX ; 1 left from center
+	je @@up ; ebx = 16? -> recht naar boven
+	jg @@right ; ebx > 16? -> rechts
+	jmp @@left ; ebx < 16? -> links
+	
+	@@up:
+		call drawBackground, offset buffer, offset bgframe 
+		call timer, 8
+		inc ecx ; increase loop counter
+		mov [dword ptr (esi + edi*4)], 0 
+		sub edi, 32 
+		mov [dword ptr (esi + edi*4)], 1 
+		call decodeArray, [dword ptr esi] 
+		call refreshVideo
+		cmp ecx, 7
+		je @@hit_detection
+		jmp @@up
+
+	@@right:
+		;calculate amount of steps to take, #steps=counter(ecx)
+		mov ecx, SHOOTBALL_STARTX ; 
+		sub ebx, ecx
+		mov ecx, ebx
+		; start with sideways movement
+		jmp @@right_sideways
+		
+		@@right_sideways:
+			call drawBackground, offset buffer, offset bgframe 
+			call timer, 8
+			mov [dword ptr (esi + edi*4)], 0 
+			add edi, 1
+			mov [dword ptr (esi + edi*4)], 1 
+			call decodeArray, [dword ptr esi] 
+			call refreshVideo
+			dec ecx
+			cmp ecx, 0
+			je @@up
+			jmp @@right_sideways
+
+	@@left:
+		mov ecx, SHOOTBALL_STARTX ; 
+		sub ecx, ebx
+		jmp @@left_sideways
+		
+		@@left_sideways:
+			call drawBackground, offset buffer, offset bgframe 
+			call timer, 8
+			mov [dword ptr (esi + edi*4)], 0 
+			sub edi, 1
+			mov [dword ptr (esi + edi*4)], 1 
+			call decodeArray, [dword ptr esi] 
+			call refreshVideo
+			dec ecx
+			cmp ecx, 0
+			je @@up
+			jmp @@left_sideways
+
+	@@hit_detection:
+		xor ecx, ecx
+		mov ecx, edi ; put the position of the current ball in ecx
+		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the original ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
+		xor eax, eax ; state counter
+		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function
+		call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
+		call hitDetection, ecx, 2 ; 2 = left
+		sub ecx, 31 ; 
+		call hitDetection, ecx, 3 ; 3 = up right
+		sub ecx, 2
+		call hitDetection, ecx, 4 ; 4 = up left
+		
+		; First check orientation 1 (right) and 2 (left) of the hitt bal
+		; Check orientation 3 (up right) -> 2 possible output states: 
+		; eax = 5: SR = 0, SL = UNDEF
+		; eax = 6: SR = 1, SL = UNDEF
+		; Check orientation 4 (up left) -> 4 possible output states: 
+		; eax = 1: SR = 1, SL = 1
+		; eax = 2: SR = 1, SL = 0
+		; eax = 3: SR = 0, SL = 1
+		; eax = 4; SR = 0, SL = 0
+
+		jmp @@itterate
+		
+		@@itterate:
+			cmp eax, 1
+			je @@hit_detection_state_1 ; SR = 1, SL = 1
+			cmp eax, 2
+			je @@hit_detection_state_2 ; SR = 1, SL = 0
+			cmp eax, 3
+			je @@hit_detection_state_3 ; SR = 0, SL = 1
+			cmp eax, 4
+			je @@done ; SR = 0, SL = 0
+
+			@@hit_detection_state_1:
+				; SR
+				add ecx, 2
+				call hitDetection, ecx, 1 
+				call hitDetection, ecx, 2 
+				sub ecx, 31 ; 
+				call hitDetection, ecx, 3 
+				sub ecx, 2
+				call hitDetection, ecx, 4 
+				; SL
+				call hitDetection, ecx, 1 
+				call hitDetection, ecx, 2 
+				sub ecx, 31 ; 
+				call hitDetection, ecx, 3 
+				sub ecx, 2
+				call hitDetection, ecx, 4 
+				jmp @@itterate				
+			@@hit_detection_state_2:
+				add ecx, 2
+				call hitDetection, ecx, 1 
+				call hitDetection, ecx, 2 
+				sub ecx, 31 ; 
+				call hitDetection, ecx, 3 
+				sub ecx, 2
+				call hitDetection, ecx, 4 
+				jmp @@itterate
+			@@hit_detection_state_3:
+				call hitDetection, ecx, 1 
+				call hitDetection, ecx, 2 
+				sub ecx, 31 ; 
+				call hitDetection, ecx, 3 
+				sub ecx, 2
+				call hitDetection, ecx, 4 
+				jmp @@itterate
+			
+
+	@@done:
+		ret
+ENDP updateArray
+
 PROC removeBall
 	ARG @@removepos:dword
 	USES esi, ecx
@@ -396,106 +462,98 @@ ENDP removeBall
 ; EXTRA PROCEDURES
 ; -------------------------------------------------------------------
 PROC hitDetection
-	ARG @@hitpos:dword
-	USES ecx, edx, ebx, eax, edi
+	ARG @@hitpos:dword, @@orientation:dword
+	USES eax, ebx, ecx, edx, edi
 
 	;check the type of ball at the given position, edx = type of ball at given position
 	mov ecx, [@@hitpos]
-	xor edx, edx
-	mov edx, [dword ptr (esi + ecx*4)]
+	;xor edx, edx
+	;mov edx, [@@original_type]
 	
-	; check the type of balls right, left and up right and up left
-	xor eax, eax
-	;xor edi, edi ; edi = recursive tracker
-	jmp @@right_ball 
-
-	@@right_ball:
-		mov eax, 1
+	; check the orientation: left or right
+	mov edi, [@@orientation]
+	cmp edi, 1
+	je @@check_right
+	cmp edi, 2
+	je @@check_left
+	cmp edi, 3
+	je @@check_up_right
+	cmp edi, 4
+	je @@check_up_left
+	
+	@@check_right:
 		add ecx, 2
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
 		je @@remove
-		jmp @@left_ball
-	@@left_ball:
-		mov eax, 2
-		sub ecx, 4
-		mov ebx, [dword ptr (esi + ecx*4)]
-		cmp ebx, edx
-		je @@remove
-		jmp @@upper_right_ball
-	@@upper_right_ball:
-		mov eax, 3
-		sub ecx, 29
-		mov ebx, [dword ptr (esi + ecx*4)]
-		cmp ebx, edx
-		je @@remove
-		jmp @@upper_left_ball
-	@@upper_left_ball:
-		mov eax, 4
+		jmp SHORT @@done
+	
+	@@check_left:
 		sub ecx, 2
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
 		je @@remove
-		jmp @@check_current_ball
+		jmp SHORT @@done
+	
+	@@check_up_right:
+		; check the type of the up right ball
+		; if it is of the same type as the original ball -> check right 
+		mov ebx, [dword ptr (esi + ecx*4)]
+		cmp ebx, edx
+		mov edi, 1
+		je @@remove ; SR = 1, SL = UNDEF -> state 6 
+		jmp @@set_up_state_5 ; SR = 0; SL = UNDEF -> state 5
+		
+		@@set_up_state_5:
+			mov eax, 5 ; SR = 0, SL = UNDEF
+			jmp SHORT @@done
+
+	@@check_up_left:
+		mov ebx, [dword ptr (esi + ecx*4)]
+		cmp ebx, edx
+		mov edi, 2
+		je @@remove ; SR = 0/1, SL = 1 -> state 1 or 3
+		; 2 posibilities: SR = 0 (eax=5) or SR = 1 (eax 6) (result of previous set_up_state -> SL was UNDEF)
+		cmp eax, 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
+		je @@set_up_state_2 ; SR = 1, SL = 0
+		jmp @@set_up_state_4 ; SR = 0, SL = 0
+		
+		@@set_up_state_2: ; SR = 1, SL = 0
+			mov eax, 2 
+			jmp @@done
+		@@set_up_state_4: ; SR = 0, SL = 0
+			mov eax, 4 
+			jmp @@done
 
 	@@remove:
-		;inc edi
-		call removeBall, ecx
-		cmp eax, 1 ; eax = 1? we checked the right ball -> go to left
-		je @@left_ball
-		cmp eax, 2
-		je @@upper_right_ball
-		cmp eax, 3
-		je @@upper_left_ball
-		jmp @@check_current_ball
+		call hitDetection, ecx, edi ; first recursive
+		call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
+		;cmp eax, 1
+		;je @@check_right
+		;cmp eax, 2
+		;je @@check_left
+		cmp edi, 1
+		je @@set_up_state_6
+		cmp edi, 2
+		je @@check_up_state
+		
+		@@set_up_state_6:
+			mov eax, 6 ; SR = 1, SL = UNDEF
+			jmp @@check_right
+		
+		@@check_up_state:
+			; 2 posibilities: SR = 0 (eax=5) or SR = 1 (eax=6) (result of previous set_up_state -> SL was UNDEF)
+			cmp eax, 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
+			je @@set_up_state_1 ; SR = 1, SL = 1
+			jmp @@set_up_state_3 ; SR = 0, SL = 1
+			
+			@@set_up_state_1: ; SR = 1, SL = 1
+				mov eax, 1 
+				jmp @@check_left
+			@@set_up_state_3: ; SR = 0, SL = 1
+				mov eax, 3
+				jmp @@check_left	
 
-	@@check_current_ball: ; check if we have to remove the current ball
-		;cmp edi, 2 ; remove ball if removedball counter is > 1
-		;jl @@done ; skip if less than 2
-		call removeBall, [@@hitpos]
-		jmp @@recursive
-	
-	@@recursive:
-		mov ecx, [@@hitpos]
-		inc edi  
-		cmp edi, 1 ; check right ball
-		je @@check_right
-		cmp edi, 2 ; check left ball
-		je @@check_left
-		cmp edi, 3 ; check upper right ball
-		je @@check_upper_right
-		cmp edi, 4 ; check upper left ball
-		je @@check_upper_left
-		jmp @@done
-		
-		@@check_right:
-			add ecx, 2
-			;push bp
-			call hitDetection, ecx
-			;pop bp
-			jmp @@recursive
-		
-		@@check_left:
-			sub ecx, 4
-			;push bp
-			call hitDetection, ecx
-			;pop bp
-			jmp @@recursive
-
-		@@check_upper_right:	
-			sub ecx, 30
-			;push bp
-			call hitDetection, ecx
-			;pop bp
-			jmp @@recursive
-		
-		@@check_upper_left:
-			sub ecx, 2
-			;push bp
-			call hitDetection, ecx
-			;pop bp
-			jmp @@recursive
-	
 	@@done:
 		ret
 ENDP hitDetection
@@ -622,7 +680,7 @@ PROC main
 	call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
 
 	;call decodeArray, offset arr_screen
-	call updateArray, offset arr_screen, 15
+	call updateArray, offset arr_screen, 5
 
 	call refreshVideo
 
@@ -662,10 +720,10 @@ DATASEG
 				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 4
 				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
-				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 6
-				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
-				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
+				dd 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
+				dd 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
+				dd 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
+				dd 0, 0, 2, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 12
