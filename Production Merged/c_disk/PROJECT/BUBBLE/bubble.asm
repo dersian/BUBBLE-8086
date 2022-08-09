@@ -396,13 +396,13 @@ PROC updateArray
 		jmp @@itterate
 		
 		@@itterate:
-			cmp eax, 1
+			cmp [state], 1
 			je @@hit_detection_state_1 ; SR = 1, SL = 1
-			cmp eax, 2
+			cmp [state], 2
 			je @@hit_detection_state_2 ; SR = 1, SL = 0
-			cmp eax, 3
+			cmp [state], 3
 			je @@hit_detection_state_3 ; SR = 0, SL = 1
-			cmp eax, 4
+			cmp [state], 4
 			je @@done ; SR = 0, SL = 0
 
 			@@hit_detection_state_1:
@@ -485,15 +485,15 @@ PROC hitDetection
 		add ecx, 2
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
-		je @@remove
-		jmp SHORT @@done
+		je SHORT  @@remove
+		jmp @@done
 	
 	@@check_left:
 		sub ecx, 2
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
 		je @@remove
-		jmp SHORT @@done
+		jmp @@done
 	
 	@@check_up_right:
 		; check the type of the up right ball
@@ -505,8 +505,8 @@ PROC hitDetection
 		jmp @@set_up_state_5 ; SR = 0; SL = UNDEF -> state 5
 		
 		@@set_up_state_5:
-			mov eax, 5 ; SR = 0, SL = UNDEF
-			jmp SHORT @@done
+			mov [state], 5 ; SR = 0, SL = UNDEF
+			jmp @@done
 
 	@@check_up_left:
 		mov ebx, [dword ptr (esi + ecx*4)]
@@ -514,15 +514,15 @@ PROC hitDetection
 		mov edi, 2
 		je @@remove ; SR = 0/1, SL = 1 -> state 1 or 3
 		; 2 posibilities: SR = 0 (eax=5) or SR = 1 (eax 6) (result of previous set_up_state -> SL was UNDEF)
-		cmp eax, 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
+		cmp [state], 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
 		je @@set_up_state_2 ; SR = 1, SL = 0
 		jmp @@set_up_state_4 ; SR = 0, SL = 0
 		
 		@@set_up_state_2: ; SR = 1, SL = 0
-			mov eax, 2 
+			mov [state], 2 
 			jmp @@done
 		@@set_up_state_4: ; SR = 0, SL = 0
-			mov eax, 4 
+			mov [state], 4 
 			jmp @@done
 
 	@@remove:
@@ -538,20 +538,20 @@ PROC hitDetection
 		je @@check_up_state
 		
 		@@set_up_state_6:
-			mov eax, 6 ; SR = 1, SL = UNDEF
+			mov [state], 6 ; SR = 1, SL = UNDEF
 			jmp @@check_right
 		
 		@@check_up_state:
 			; 2 posibilities: SR = 0 (eax=5) or SR = 1 (eax=6) (result of previous set_up_state -> SL was UNDEF)
-			cmp eax, 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
+			cmp [state], 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
 			je @@set_up_state_1 ; SR = 1, SL = 1
 			jmp @@set_up_state_3 ; SR = 0, SL = 1
 			
 			@@set_up_state_1: ; SR = 1, SL = 1
-				mov eax, 1 
+				mov [state], 1 
 				jmp @@check_left
 			@@set_up_state_3: ; SR = 0, SL = 1
-				mov eax, 3
+				mov [state], 3
 				jmp @@check_left	
 
 	@@done:
@@ -713,17 +713,19 @@ UDATASEG
 DATASEG
     ; Vars
     f ball <,,>
+	
+	state dd 0
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
 				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 4
-				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
-				dd 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
-				dd 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
-				dd 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
-				dd 0, 0, 2, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
+				dd 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
+				dd 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
+				dd 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
+				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
+				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 12
@@ -793,8 +795,7 @@ DATASEG
     ; Files
 	bgfile				db "bg.bin", 0
 	blueballfile		db "blueball.bin", 0
-	greenballfile		db "blueball.bin", 0
-	pinkballfile		db "blueball.bin", 0
+	greenballfile		db "greenball.bin", 0
 	yellowballfile		db "blueball.bin", 0
 
     ; Error Messages

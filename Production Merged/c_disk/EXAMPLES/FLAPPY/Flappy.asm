@@ -133,7 +133,7 @@ PROC time
 	
 	cld
 	mov esi, offset buffer
-	mov edi, VMEMADR
+	mov edi,VMEMADR
 	mov ecx, FRAMESIZE  
 	rep movsb
 	cmp [startGame],0
@@ -916,7 +916,7 @@ PROC main
 	call displayString, offset escmsg,0Dh,09h
 	@@again:
 	call readKey
-	cmp [startGame],1
+	cmp [startGame],0
 	je @@again
 	
 	@@gameLoop:
