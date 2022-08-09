@@ -3,9 +3,11 @@ P386
 MODEL FLAT, C
 ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
-ARR_LEN equ 400
+INCLUDE "keyb.inc"
+
+ARR_LEN equ 800
 ARR_X equ 40
-ARR_Y equ 10
+ARR_Y equ 20
 
 RAND_A = 1103515245
 RAND_C = 12345
@@ -102,71 +104,8 @@ PROC printIntList ;Prints array using arrayptr
 	ret
 ENDP
 
-;PROC DrawStartGrid ;calls DrawColor
-;	ARG	@@arrayptr:dword , @@color1:dword, @@color2:dword, @@shiftedRow:dword
-;	USES eax, edi
-;	@@forEveryLine:
-;		inc eax
-;		mov edi, [dword ptr @@shiftedrow] ;should we shift this Row?
-;		cmp eax, ARR_Y + 1
-;		je @@done
-;		
-;		call DrawLine offset arrlen, [color1], [color2], [shiftedRow]
-;	
-;	@@done:
-;		ret
 
-;ENDP DrawStartGrid
-
-PROC DrawLine ;Adds 1 horizontal line to the array
-	USES ecx, edx, esi, edi
-		
-	xor edx, edx  ;ctr for inner
-	xor esi, esi  ;ctr for alternating 1 0
-	xor edi, edi  ;ctr for alternating offset
-	add ebx, 4
-
-	@@inner:	   
-		cmp edx, ARR_X 
-		je @@done
-		
-		add ebx, 4
-		cmp esi, 0
-		je @@addColor
-				
-		xor esi, esi
-		inc edx
-		jmp @@inner
-	
-	@@noOffset:
-		mov esi, 0
-		jmp @@inner
-	
-	@@blockoffset:
-		mov esi, 1
-		xor edi, edi
-		jmp @@inner
-
-	@@addColor:
-		mov ecx, 2
-		mov [ebx], ecx ;update array
-		inc esi
-		inc edx
-		jmp @@inner
-	
-	@@done:
-		ret
-
-ENDP DrawLine
-
-PROC storePTR
-	ARG	@@arrayptr:dword
-	USES ebx
-		xor ebx, ebx
-		mov ebx, [@@arrayptr]	;pointer
-ENDP storePTR
-
-PROC update2
+PROC StartGrid
 	ARG	@@arrayptr:dword , @@color1:dword, @@color2:dword
 	USES eax, ebx, ecx, edx, esi, edi
 	
@@ -216,10 +155,9 @@ PROC update2
 		inc edx
 		jmp @@inner
 	
-
 	@@done:
 		ret
-ENDP update2
+ENDP StartGrid
 
 PROC addColor
 	uses eax
@@ -235,15 +173,24 @@ ENDP addColor
 PROC main
 	sti
 	cld
-	
+
 	call rand_init
-
-	call update2, offset arrlen, [color1], [color2]
-	;call update2, offset arrlen, [color2], [color1]
+	call __keyb_installKeyboardHandler
+	
+	@@goAgain:
+	call StartGrid, offset arrlen, [color1], [color2]
 	call printIntList, offset arrlen
+	
+	@@loopje:
+	mov al, [__keyb_rawScanCode] ;last pressed key
+	cmp al, 02h
+	je @@goAgain
+	cmp al, 01h
+	jne @@loopje
 
-	mov ah,0h		; wait for keystroke
-    int 16h
+	call __keyb_uninstallKeyboardHandler
+
+
 	mov	ax,4C00h 	; terminate
 	int 21h
 ENDP main
@@ -255,9 +202,8 @@ DATASEG
 	
 	rand_seed   dd ?
 	arrlen dd ARR_LEN
-	;arrdata dd 0, 1, 6, 3, 4
-
-	arrdata dd ARR_LEN dup (?) ;empty array with length 5
+	
+	arrdata dd ARR_LEN dup (?) ;empty array with length ARR_LEN
 	shiftedRow dd 0
 	color1 dd 2
 	color2 dd 3

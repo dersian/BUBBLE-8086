@@ -3,7 +3,7 @@
 # =============================================================================
 
 # Settings - Edit the names of the object and executable files.
-objects1 = HELLO.obj
+objects1 = HELLO.obj KEYB.obj
 dest = HELLO.exe
 
 # =============================================================================
