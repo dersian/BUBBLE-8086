@@ -393,53 +393,53 @@ PROC updateArray
 		; eax = 3: SR = 0, SL = 1
 		; eax = 4; SR = 0, SL = 0
 
-		jmp @@itterate
+		jmp @@done
 		
-		@@itterate:
-			cmp [state], 1
-			je @@hit_detection_state_1 ; SR = 1, SL = 1
-			cmp [state], 2
-			je @@hit_detection_state_2 ; SR = 1, SL = 0
-			cmp [state], 3
-			je @@hit_detection_state_3 ; SR = 0, SL = 1
-			cmp [state], 4
-			je @@done ; SR = 0, SL = 0
+		;@itterate:
+		;	cmp [state], 1
+		;	je @@hit_detection_state_1 ; SR = 1, SL = 1
+		;	cmp [state], 2
+		;	je @@hit_detection_state_2 ; SR = 1, SL = 0
+		;	cmp [state], 3
+		;	je @@hit_detection_state_3 ; SR = 0, SL = 1
+		;	cmp [state], 4
+		;	je @@done ; SR = 0, SL = 0
 
-			@@hit_detection_state_1:
-				; SR
-				add ecx, 2
-				call hitDetection, ecx, 1 
-				call hitDetection, ecx, 2 
-				sub ecx, 31 ; 
-				call hitDetection, ecx, 3 
-				sub ecx, 2
-				call hitDetection, ecx, 4 
-				; SL
-				call hitDetection, ecx, 1 
-				call hitDetection, ecx, 2 
-				sub ecx, 31 ; 
-				call hitDetection, ecx, 3 
-				sub ecx, 2
-				call hitDetection, ecx, 4 
-				jmp @@itterate				
-			@@hit_detection_state_2:
-				add ecx, 2
-				call hitDetection, ecx, 1 
-				call hitDetection, ecx, 2 
-				sub ecx, 31 ; 
-				call hitDetection, ecx, 3 
-				sub ecx, 2
-				call hitDetection, ecx, 4 
-				jmp @@itterate
-			@@hit_detection_state_3:
-				call hitDetection, ecx, 1 
-				call hitDetection, ecx, 2 
-				sub ecx, 31 ; 
-				call hitDetection, ecx, 3 
-				sub ecx, 2
-				call hitDetection, ecx, 4 
-				jmp @@itterate
-			
+		;	@@hit_detection_state_1:
+		;		; SR
+		;		add ecx, 2 ; go back to SR
+		;		;call hitDetection, ecx, 1 
+		;		;call hitDetection, ecx, 2 
+		;		sub ecx, 31 ; 
+		;		call hitDetection, ecx, 3 
+		;		sub ecx, 2
+		;		call hitDetection, ecx, 4 
+		;		; SL
+		;		add ecx, 33
+		;		;call hitDetection, ecx, 1 
+		;		;call hitDetection, ecx, 2 
+		;		sub ecx, 31 ; 
+		;		call hitDetection, ecx, 3 
+		;		sub ecx, 2
+		;		call hitDetection, ecx, 4 
+		;		jmp @@itterate				
+		;	@@hit_detection_state_2:
+		;		add ecx, 2
+		;		call hitDetection, ecx, 1 
+		;		call hitDetection, ecx, 2 
+		;		sub ecx, 31 ; 
+		;		call hitDetection, ecx, 3 
+		;		sub ecx, 2
+		;		call hitDetection, ecx, 4 
+		;		jmp @@itterate
+		;	@@hit_detection_state_3:
+		;		call hitDetection, ecx, 1 
+		;		call hitDetection, ecx, 2 
+		;		sub ecx, 31 ; 
+		;		call hitDetection, ecx, 3 
+		;		sub ecx, 2
+		;		call hitDetection, ecx, 4 
+		;		jmp @@itterate
 
 	@@done:
 		ret
@@ -485,7 +485,7 @@ PROC hitDetection
 		add ecx, 2
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
-		je SHORT  @@remove
+		je @@remove
 		jmp @@done
 	
 	@@check_left:
@@ -500,59 +500,65 @@ PROC hitDetection
 		; if it is of the same type as the original ball -> check right 
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
-		mov edi, 1
-		je @@remove ; SR = 1, SL = UNDEF -> state 6 
-		jmp @@set_up_state_5 ; SR = 0; SL = UNDEF -> state 5
-		
-		@@set_up_state_5:
-			mov [state], 5 ; SR = 0, SL = UNDEF
-			jmp @@done
+		je @@remove 
+		jmp @@done 		
 
 	@@check_up_left:
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
-		mov edi, 2
-		je @@remove ; SR = 0/1, SL = 1 -> state 1 or 3
-		; 2 posibilities: SR = 0 (eax=5) or SR = 1 (eax 6) (result of previous set_up_state -> SL was UNDEF)
-		cmp [state], 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
-		je @@set_up_state_2 ; SR = 1, SL = 0
-		jmp @@set_up_state_4 ; SR = 0, SL = 0
-		
-		@@set_up_state_2: ; SR = 1, SL = 0
-			mov [state], 2 
-			jmp @@done
-		@@set_up_state_4: ; SR = 0, SL = 0
-			mov [state], 4 
-			jmp @@done
+		je @@remove 
+		jmp @@done
 
 	@@remove:
-		call hitDetection, ecx, edi ; first recursive
-		call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
-		;cmp eax, 1
-		;je @@check_right
-		;cmp eax, 2
-		;je @@check_left
+		;call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
+		;call hitDetection, ecx, 2 ; 2 = left
+		;sub ecx, 31 
+		;call hitDetection, ecx, 3 ; 3 = up right
+		;;call removeBall, ecx
+		;sub ecx, 2
+		;call hitDetection, ecx, 4 ; 4 = up left
+		;call removeBall, ecx 
+		
 		cmp edi, 1
-		je @@set_up_state_6
+		je @@R
 		cmp edi, 2
-		je @@check_up_state
+		je @@L
+		cmp edi, 3
+		je @@SRSL
+		cmp edi, 4
+		je @@SRSL
+	
+
+		@@SRSL:
+			call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
+			call hitDetection, ecx, 2 ; 2 = left
+			;call removeBall, ecx 
+			sub ecx, 31 
+			call hitDetection, ecx, 3 ; 3 = up right
+			sub ecx, 2
+			call hitDetection, ecx, 4 ; 4 = up left
+			call removeBall, ecx
+			jmp @@done
 		
-		@@set_up_state_6:
-			mov [state], 6 ; SR = 1, SL = UNDEF
-			jmp @@check_right
+		@@R:
+			call hitDetection, ecx, 1
+			;call removeBall, ecx 
+			sub ecx, 31 
+			call hitDetection, ecx, 3 
+			sub ecx, 2
+			call hitDetection, ecx, 4 
+			call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
+			je @@check_right
 		
-		@@check_up_state:
-			; 2 posibilities: SR = 0 (eax=5) or SR = 1 (eax=6) (result of previous set_up_state -> SL was UNDEF)
-			cmp [state], 6 ; check which undefined state we are in, if eax is not this state than it is the other state(5)
-			je @@set_up_state_1 ; SR = 1, SL = 1
-			jmp @@set_up_state_3 ; SR = 0, SL = 1
-			
-			@@set_up_state_1: ; SR = 1, SL = 1
-				mov [state], 1 
-				jmp @@check_left
-			@@set_up_state_3: ; SR = 0, SL = 1
-				mov [state], 3
-				jmp @@check_left	
+		@@L:
+			call hitDetection, ecx, 2
+			;call removeBall, ecx 
+			sub ecx, 31 
+			call hitDetection, ecx, 3 
+			sub ecx, 2
+			call hitDetection, ecx, 4 
+			call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
+			je @@check_left
 
 	@@done:
 		ret
@@ -722,10 +728,10 @@ DATASEG
 				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 4
 				dd 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
-				dd 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
-				dd 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
-				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
+				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
+				dd 2, 0, 2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
+				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
+				dd 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 12
@@ -795,8 +801,9 @@ DATASEG
     ; Files
 	bgfile				db "bg.bin", 0
 	blueballfile		db "blueball.bin", 0
-	greenballfile		db "greenball.bin", 0
+	greenballfile		db "blueball.bin", 0
 	yellowballfile		db "blueball.bin", 0
+	pinkballfile		db "blueball.bin", 0
 
     ; Error Messages
 	openErrorMsg 	db "could not open file", 13, 10, '$'
