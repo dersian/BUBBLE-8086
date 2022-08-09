@@ -42,6 +42,28 @@ STRUC ball
 	y dd 5
 ENDS ball
 ; -------------------------------------------------------------------
+; SAM's ADDITIONS
+; -------------------------------------------------------------------
+
+PROC displayString
+	ARG @@offset:DWORD, @@x:dword, @@y:dword
+	USES EAX, EBX, EDX
+	
+	MOV EDX, [@@y] 		; row in EDX
+	MOV EBX, [@@x] 		; column in EBX
+	MOV AH, 02H			; set cursor position
+	SHL EDX, 08H 		; row in DH (00H is top)
+	MOV DL, BL 			; column in DL (00H is left)
+	MOV BH, 0 			; page number in BH
+	INT 10H 			; raise interrupt
+	MOV AH, 09H 		; write string to standard output
+	MOV EDX, [@@offset] ; offset of ’$’-terminated string in EDX
+	INT 21H 			; raise interrupt
+	RET
+ENDP displayString
+
+
+; -------------------------------------------------------------------
 ; VIDEO MODE
 ; -------------------------------------------------------------------
 PROC setVideoMode
@@ -577,7 +599,19 @@ PROC main
 	;open, read and draw background
 	call openFile, offset bgfile, offset bghandle
 	call readChunk, FRAMESIZE, offset bghandle, offset bgframe
+	call __keyb_installKeyboardHandler	
+
 	call drawBackground, offset buffer, offset bgframe
+
+	@@loopje:
+	call displayString, offset startmsg1,0Ch,07h
+	mov al, [__keyb_rawScanCode] ;last pressed key
+	;cmp al, 02h
+	;je @@goAgain
+	cmp al, 01h
+	jne @@loopje
+
+
 	;open, read and different balls
 	call openFile, offset blueballfile, offset blueballhandle
 	call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
@@ -588,14 +622,17 @@ PROC main
 	call openFile, offset yellowballfile, offset yellowballhandle
 	call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
 
+
 	;call decodeArray, offset arr_screen
 	call updateArray, offset arr_screen, 15
 	call updateArray, offset arr_screen, 15
 	call updateArray, offset arr_screen, 15
-	;call updateArray, offset arr_screen, 9
+	call updateArray, offset arr_screen, 9
 
 	call refreshVideo
 
+	call displayString, offset startmsg1,0Ch,07h
+	call __keyb_uninstallKeyboardHandler
 	call	waitForSpecificKeystroke, 001Bh
 	call	terminateProcess
 
@@ -623,8 +660,13 @@ UDATASEG
 ; DATA
 ; -------------------------------------------------------------------
 DATASEG
+	startmsg1	db "Pres enter to play", 13, 10, '$'
+
+
     ; Vars
     f ball <,,>
+
+
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
