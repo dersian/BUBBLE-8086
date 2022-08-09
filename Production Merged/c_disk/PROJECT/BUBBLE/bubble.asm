@@ -382,7 +382,7 @@ PROC updateArray
 		call hitDetection, ecx, 3 ; 3 = up right
 		sub ecx, 2
 		call hitDetection, ecx, 4 ; 4 = up left
-		
+
 		; First check orientation 1 (right) and 2 (left) of the hitt bal
 		; Check orientation 3 (up right) -> 2 possible output states: 
 		; eax = 5: SR = 0, SL = UNDEF
@@ -522,7 +522,7 @@ PROC hitDetection
 		cmp edi, 1
 		je @@R
 		cmp edi, 2
-		je @@L
+		je SHORT @@L
 		cmp edi, 3
 		je @@SRSL
 		cmp edi, 4
@@ -548,7 +548,7 @@ PROC hitDetection
 			sub ecx, 2
 			call hitDetection, ecx, 4 
 			call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
-			je @@check_right
+			jmp @@done
 		
 		@@L:
 			call hitDetection, ecx, 2
@@ -558,7 +558,7 @@ PROC hitDetection
 			sub ecx, 2
 			call hitDetection, ecx, 4 
 			call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
-			je @@check_left
+			jmp @@done
 
 	@@done:
 		ret
@@ -729,7 +729,7 @@ DATASEG
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 4
 				dd 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
 				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
-				dd 2, 0, 2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
+				dd 2, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
 				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
 				dd 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
