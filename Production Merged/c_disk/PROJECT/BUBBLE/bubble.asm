@@ -371,76 +371,26 @@ PROC updateArray
 			jmp @@left_sideways
 
 	@@hit_detection:
-		xor ecx, ecx
+		mov [ball_hit], 0 ; reset global variable -> used to check if the played ball has hit any balls of the same type -> remove if yes
+		xor ecx, ecx 
 		mov ecx, edi ; put the position of the current ball in ecx
-		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the original ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
-		xor eax, eax ; state counter
-		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function
+		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the played ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
+		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function	
 		call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
 		call hitDetection, ecx, 2 ; 2 = left
-		sub ecx, 31 ; 
+		sub ecx, 31 ; move 1 row up and 1 to the right (32-1)
 		call hitDetection, ecx, 3 ; 3 = up right
-		sub ecx, 2
+		sub ecx, 2 ; move 1 position to the left
 		call hitDetection, ecx, 4 ; 4 = up left
-
-		; First check orientation 1 (right) and 2 (left) of the hitt bal
-		; Check orientation 3 (up right) -> 2 possible output states: 
-		; eax = 5: SR = 0, SL = UNDEF
-		; eax = 6: SR = 1, SL = UNDEF
-		; Check orientation 4 (up left) -> 4 possible output states: 
-		; eax = 1: SR = 1, SL = 1
-		; eax = 2: SR = 1, SL = 0
-		; eax = 3: SR = 0, SL = 1
-		; eax = 4; SR = 0, SL = 0
-
+		
+		cmp [ball_hit], 1 ; check if the played ball had a succesfull hit detection
+		je @@remove_played_ball ; if yes remove the played ball otherwise leave it
 		jmp @@done
 		
-		;@itterate:
-		;	cmp [state], 1
-		;	je @@hit_detection_state_1 ; SR = 1, SL = 1
-		;	cmp [state], 2
-		;	je @@hit_detection_state_2 ; SR = 1, SL = 0
-		;	cmp [state], 3
-		;	je @@hit_detection_state_3 ; SR = 0, SL = 1
-		;	cmp [state], 4
-		;	je @@done ; SR = 0, SL = 0
-
-		;	@@hit_detection_state_1:
-		;		; SR
-		;		add ecx, 2 ; go back to SR
-		;		;call hitDetection, ecx, 1 
-		;		;call hitDetection, ecx, 2 
-		;		sub ecx, 31 ; 
-		;		call hitDetection, ecx, 3 
-		;		sub ecx, 2
-		;		call hitDetection, ecx, 4 
-		;		; SL
-		;		add ecx, 33
-		;		;call hitDetection, ecx, 1 
-		;		;call hitDetection, ecx, 2 
-		;		sub ecx, 31 ; 
-		;		call hitDetection, ecx, 3 
-		;		sub ecx, 2
-		;		call hitDetection, ecx, 4 
-		;		jmp @@itterate				
-		;	@@hit_detection_state_2:
-		;		add ecx, 2
-		;		call hitDetection, ecx, 1 
-		;		call hitDetection, ecx, 2 
-		;		sub ecx, 31 ; 
-		;		call hitDetection, ecx, 3 
-		;		sub ecx, 2
-		;		call hitDetection, ecx, 4 
-		;		jmp @@itterate
-		;	@@hit_detection_state_3:
-		;		call hitDetection, ecx, 1 
-		;		call hitDetection, ecx, 2 
-		;		sub ecx, 31 ; 
-		;		call hitDetection, ecx, 3 
-		;		sub ecx, 2
-		;		call hitDetection, ecx, 4 
-		;		jmp @@itterate
-
+		@@remove_played_ball:
+			add ecx, 33 ; reset the position to the position of the playe ball
+			call removeBall, ecx
+		
 	@@done:
 		ret
 ENDP updateArray
@@ -465,13 +415,10 @@ PROC hitDetection
 	ARG @@hitpos:dword, @@orientation:dword
 	USES eax, ebx, ecx, edx, edi
 
-	;check the type of ball at the given position, edx = type of ball at given position
-	mov ecx, [@@hitpos]
-	;xor edx, edx
-	;mov edx, [@@original_type]
+	mov ecx, [@@hitpos] ; move the passed position to the ecx register (ecx is used to acces the elements in the array on a given position)
 	
-	; check the orientation: left or right
-	mov edi, [@@orientation]
+	; check the orientation: left, right, up right or up left
+	mov edi, [@@orientation] ; move the passed orientation to the edi register (edi is used to check the current orientation)
 	cmp edi, 1
 	je @@check_right
 	cmp edi, 2
@@ -482,10 +429,10 @@ PROC hitDetection
 	je @@check_up_left
 	
 	@@check_right:
-		add ecx, 2
-		mov ebx, [dword ptr (esi + ecx*4)]
-		cmp ebx, edx
-		je @@remove
+		add ecx, 2 ; move 1 position to the right
+		mov ebx, [dword ptr (esi + ecx*4)] ; check the type of ball
+		cmp ebx, edx ; compare it to the type of the played ball
+		je @@remove ; remove if equal
 		jmp @@done
 	
 	@@check_left:
@@ -496,8 +443,6 @@ PROC hitDetection
 		jmp @@done
 	
 	@@check_up_right:
-		; check the type of the up right ball
-		; if it is of the same type as the original ball -> check right 
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
 		je @@remove 
@@ -510,15 +455,8 @@ PROC hitDetection
 		jmp @@done
 
 	@@remove:
-		;call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
-		;call hitDetection, ecx, 2 ; 2 = left
-		;sub ecx, 31 
-		;call hitDetection, ecx, 3 ; 3 = up right
-		;;call removeBall, ecx
-		;sub ecx, 2
-		;call hitDetection, ecx, 4 ; 4 = up left
-		;call removeBall, ecx 
-		
+		mov [ball_hit], 1 ; indicate that the ball has been hit
+		; check the current orientation
 		cmp edi, 1
 		je @@R
 		cmp edi, 2
@@ -527,37 +465,36 @@ PROC hitDetection
 		je @@SRSL
 		cmp edi, 4
 		je @@SRSL
-	
 
-		@@SRSL:
-			call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
-			call hitDetection, ecx, 2 ; 2 = left
-			;call removeBall, ecx 
-			sub ecx, 31 
-			call hitDetection, ecx, 3 ; 3 = up right
-			sub ecx, 2
-			call hitDetection, ecx, 4 ; 4 = up left
-			call removeBall, ecx
-			jmp @@done
-		
 		@@R:
-			call hitDetection, ecx, 1
-			;call removeBall, ecx 
+			; Right orientation -> check the right, upright and left ball for is these are of the same type => recursive
+			call hitDetection, ecx, 1 ; right
+			call removeBall, ecx ; remove the ball because it was of the same type as the played ball
 			sub ecx, 31 
-			call hitDetection, ecx, 3 
+			call hitDetection, ecx, 3 ; up right
 			sub ecx, 2
-			call hitDetection, ecx, 4 
-			call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
-			jmp @@done
+			call hitDetection, ecx, 4 ; up left
+			jmp @@done 
 		
 		@@L:
+			; Left orientation -> check the left, upright and left ball
 			call hitDetection, ecx, 2
-			;call removeBall, ecx 
+			call removeBall, ecx 
 			sub ecx, 31 
 			call hitDetection, ecx, 3 
 			sub ecx, 2
 			call hitDetection, ecx, 4 
-			call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
+			jmp @@done
+
+		@@SRSL:
+			; Up right and up left orientation -> check the left, right, upright and upleft for same type -> we check the left and right orientation because we moved 1 row up
+			call hitDetection, ecx, 1 
+			call hitDetection, ecx, 2 
+			call removeBall, ecx 
+			sub ecx, 31 
+			call hitDetection, ecx, 3 
+			sub ecx, 2
+			call hitDetection, ecx, 4 
 			jmp @@done
 
 	@@done:
@@ -720,7 +657,7 @@ DATASEG
     ; Vars
     f ball <,,>
 	
-	state dd 0
+	ball_hit dd 0
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
