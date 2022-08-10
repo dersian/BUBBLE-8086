@@ -689,14 +689,17 @@ PROC incScore
 	ARG @@score:dword
 	USES edi, eax, ecx
 	xor eax, eax
+	; juiste manier om byte array in te laden, en 1 positie te verschuiven en data te verkrijgen terug:
+	; ---
 	mov edi, [@@score]
 	mov eax, [edi]
 	inc edi		;pointer
 	movzx eax, [byte ptr edi]
+	; ---
 	cmp eax, 49
 	je @@decade
 	dec eax
-	mov [dword ptr (edi + ecx)], eax
+	;mov [dword ptr (edi + ecx)], eax -> niet juiste manier dus
 	jmp @@done
 	@@decade:
 		mov [dword ptr edi], 57
