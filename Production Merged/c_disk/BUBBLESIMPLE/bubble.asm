@@ -6,6 +6,9 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 ; -------------------------------------------------------------------
 ; MACROS + INCLUDES
 ; -------------------------------------------------------------------
+INCLUDE "keyb.inc"
+
+
 VMEMADR EQU 0A0000h	; video memory address
 FRAMEWIDTH EQU 320	; screen witdth
 FRAMEHEIGHT EQU 200	; screen height
@@ -25,8 +28,9 @@ BALLSIZE EQU BALLHEIGHT*BALLWIDTH
 BALL_XSTART EQU 64
 BALL_YSTART EQU 5
 
-SHOOTBALL_STARTPOS EQU 496 ; Absolute startpos
-SHOOTBALL_STARTX EQU 15 ; Xcord of startpos
+SHOOTBALL_STARTPOS EQU 496 ; Absolute starting position of the shooting ball
+SHOOTBALL_STARTX EQU 15 ; Starting xcord of the shooting ball
+SHOOTBALL_STARTTYPE EQU 1 ; Starting ball type of the shooting ball
 
 INCLUDE "keyb.inc" 
 
@@ -41,28 +45,6 @@ STRUC ball
 	x dd 64 ; width of 192
 	y dd 5
 ENDS ball
-; -------------------------------------------------------------------
-; SAM's ADDITIONS
-; -------------------------------------------------------------------
-
-PROC displayString
-	ARG @@offset:DWORD, @@x:dword, @@y:dword
-	USES EAX, EBX, EDX
-	
-	MOV EDX, [@@y] 		; row in EDX
-	MOV EBX, [@@x] 		; column in EBX
-	MOV AH, 02H			; set cursor position
-	SHL EDX, 08H 		; row in DH (00H is top)
-	MOV DL, BL 			; column in DL (00H is left)
-	MOV BH, 0 			; page number in BH
-	INT 10H 			; raise interrupt
-	MOV AH, 09H 		; write string to standard output
-	MOV EDX, [@@offset] ; offset of ’$’-terminated string in EDX
-	INT 21H 			; raise interrupt
-	RET
-ENDP displayString
-
-
 ; -------------------------------------------------------------------
 ; VIDEO MODE
 ; -------------------------------------------------------------------
@@ -132,6 +114,30 @@ PROC updateColourPalette
 
 	ret
 ENDP updateColourPalette
+; -------------------------------------------------------------------
+; INITIALIZING
+; -------------------------------------------------------------------
+PROC initialize 
+	call __keyb_installKeyboardHandler
+
+	call setVideoMode, 13h
+	call updateColourPalette, 54 , offset palette
+	;open, read and draw background
+	call openFile, offset bgfile, offset bghandle
+	call readChunk, FRAMESIZE, offset bghandle, offset bgframe
+	call drawBackground, offset buffer, offset bgframe
+	;open, read and different balls
+	call openFile, offset blueballfile, offset blueballhandle
+	call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
+	call openFile, offset greenballfile, offset greenballhandle
+	call readChunk, BALLSIZE, offset greenballhandle, offset greenballframe
+	call openFile, offset pinkballfile, offset pinkballhandle
+	call readChunk, BALLSIZE, offset pinkballhandle, offset pinkballframe
+	call openFile, offset yellowballfile, offset yellowballhandle
+	call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
+
+	ret 
+ENDP initialize
 ; -------------------------------------------------------------------
 ; RANDOM
 ; -------------------------------------------------------------------
@@ -259,7 +265,7 @@ PROC drawBall
 ENDP drawBall
 
 ; -------------------------------------------------------------------
-; ARRAY/UPDATE PROCEDURES
+; ARRAY/UPDATE/MOVE PROCEDURES
 ; -------------------------------------------------------------------
 ; decode ARRAY
 PROC decodeArray
@@ -323,90 +329,48 @@ PROC decodeArray
 		ret
 ENDP decodeArray
 
-; update ARRAY with corresponding path per timer count (simple ball movement)
+; update ARRAY: place ball of given type at a given position and choose to check hit detection or not
 PROC updateArray
-	ARG @@arr:dword, @@path:dword
+	ARG @@arr:dword, @@position:dword, @@ball_type:dword, @@hitDetectionCheck:dword
 	USES edx, eax, ebx, ecx, esi, edi
-
-	mov esi, [@@arr] ; store array
-	mov edi, SHOOTBALL_STARTPOS ; load in start position of the shooting ball
-	mov ebx, [@@path] ; load in given path
+	; load in given parameters
+	mov esi, [@@arr]
 	xor ecx, ecx
-	xor eax, eax
-
-	; movement orientation
-	cmp ebx, SHOOTBALL_STARTX ; 1 left from center
-	je @@up ; ebx = 16? -> recht naar boven
-	jg @@right ; ebx > 16? -> rechts
-	jmp @@left ; ebx < 16? -> links
+	mov ecx, [@@position]
+	mov ebx, [@@ball_type]
+	; place the ball in the array
+	call drawBackground, offset buffer, offset bgframe
+	call timer, 8
+	mov [dword ptr (esi + ecx*4)], ebx
+	call decodeArray, [dword ptr esi]
+	call refreshVideo
+	cmp [@@hitDetectionCheck], 1
+	je @@hitDetection
+	jmp @@done
 	
-	@@up:
-		call drawBackground, offset buffer, offset bgframe 
-		call timer, 8
-		inc ecx ; increase loop counter
-		mov [dword ptr (esi + edi*4)], 0 
-		sub edi, 32 
-		mov [dword ptr (esi + edi*4)], 1 
-		call decodeArray, [dword ptr esi] 
-		call refreshVideo
-		cmp ecx, 7
-		je @@hit_detection
-		jmp @@up
-
-	@@right:
-		;calculate amount of steps to take, #steps=counter(ecx)
-		mov ecx, SHOOTBALL_STARTX ; 
-		sub ebx, ecx
-		mov ecx, ebx
-		; start with sideways movement
-		jmp @@right_sideways
-		
-		@@right_sideways:
-			call drawBackground, offset buffer, offset bgframe 
-			call timer, 8
-			mov [dword ptr (esi + edi*4)], 0 
-			add edi, 1
-			mov [dword ptr (esi + edi*4)], 1 
-			call decodeArray, [dword ptr esi] 
-			call refreshVideo
-			dec ecx
-			cmp ecx, 0
-			je @@up
-			jmp @@right_sideways
-
-	@@left:
-		mov ecx, SHOOTBALL_STARTX ; 
-		sub ecx, ebx
-		jmp @@left_sideways
-		
-		@@left_sideways:
-			call drawBackground, offset buffer, offset bgframe 
-			call timer, 8
-			mov [dword ptr (esi + edi*4)], 0 
-			sub edi, 1
-			mov [dword ptr (esi + edi*4)], 1 
-			call decodeArray, [dword ptr esi] 
-			call refreshVideo
-			dec ecx
-			cmp ecx, 0
-			je @@up
-			jmp @@left_sideways
-
-	@@hit_detection:
-		xor ecx, ecx
-		mov ecx, edi ; put the position of the current ball in ecx
-		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the original ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
-		xor eax, eax ; state counter
-		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function
+	@@hitDetection:
+		mov [ball_hit], 0 ; reset global variable -> used to check if the played ball has hit any balls of the same type -> remove if yes
+		;xor ecx, ecx 
+		;mov ecx, edi ; put the position of the current ball in ecx
+		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the played ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
+		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function	
 		call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
 		call hitDetection, ecx, 2 ; 2 = left
-		sub ecx, 31 ; 
+		sub ecx, 31 ; move 1 row up and 1 to the right (32-1)
 		call hitDetection, ecx, 3 ; 3 = up right
-		sub ecx, 2
+		sub ecx, 2 ; move 1 position to the left
 		call hitDetection, ecx, 4 ; 4 = up left
 
+		cmp [ball_hit], 1 ; check if the played ball had a succesfull hit detection
+		je @@remove_played_ball ; if yes remove the played ball otherwise leave it
 		jmp @@done
-				
+
+		@@remove_played_ball:
+			add ecx, 33 ; reset the position to the position of the playe ball
+			call removeBall, ecx
+		
+
+		
 	@@done:
 		ret
 ENDP updateArray
@@ -424,6 +388,86 @@ PROC removeBall
 
 	ret
 ENDP removeBall
+
+; Moves the shooting/start bal of a given type 1 position in the desired direction
+PROC moveStartBall
+	ARG @@arr:dword, @@orientation:dword
+	USES ecx, esi
+	
+	mov esi, [@@arr]
+	; first remove the start ball
+	call removeBall, [startBall_pos]
+
+	; check orientation and place start ball on the new position
+	cmp [@@orientation], 0 ; left
+	je @@move_left
+	cmp [@@orientation], 1 ; right
+	je @@move_right
+	jmp @@done
+	
+	@@move_left:
+		sub [startBall_pos], 2
+		mov ecx, [startBall_pos]
+		call updateArray, esi, [startBall_pos], [startBall_type], 0
+		jmp @@done
+
+	@@move_right:
+		add [startBall_pos], 2
+		mov ecx, [startBall_pos]
+		call updateArray, esi, [startBall_pos], [startBall_type], 0
+		jmp @@done
+	
+	@@done:
+		ret
+ENDP moveStartBall
+
+PROC shootStartBall
+	ARG @@arr:dword
+	USES eax, ebx, ecx
+	
+	mov esi, [@@arr]
+	xor ebx, ebx ; use ebx to count the amount of rows that we need to move up
+	xor ecx, ecx
+	mov ecx, [startBall_pos]
+	jmp @@count_upper_rows
+
+	@@count_upper_rows:
+		sub ecx, 32
+		mov eax, [dword ptr (esi + ecx*4)]
+		cmp eax, 0
+		ja @@continue ; jump if above
+		inc ebx
+		jmp @@count_upper_rows
+	
+	@@continue:
+		sub ebx, 1
+		xor ecx, ecx
+		mov ecx, [startBall_pos]
+		jmp @@up
+		
+		@@up:
+			call removeBall, ecx ; first remove ball
+			sub ecx, 32
+			call updateArray, esi, ecx, [startBall_type], 1 ; fill array with corresponding ball WITH hit detection enabled
+			dec ebx
+			cmp ebx, 0
+			je @@done
+			jmp @@up
+
+	@@done:
+		ret
+ENDP shootStartBall
+
+PROC resetStartBall
+	ARG @@arr:dword
+	USES eax, ebx, ecx, edx, edi
+	
+	mov esi, [@@arr]
+	; mov [startBall_pos], RANDOM CIJFER TUSSEN 1 en 4 -> call random
+	call updateArray, esi, [startBall_pos], [startBall_type], 1
+
+	ret
+ENDP resetStartBall
 ; -------------------------------------------------------------------
 ; EXTRA PROCEDURES
 ; -------------------------------------------------------------------
@@ -431,13 +475,10 @@ PROC hitDetection
 	ARG @@hitpos:dword, @@orientation:dword
 	USES eax, ebx, ecx, edx, edi
 
-	;check the type of ball at the given position, edx = type of ball at given position
-	mov ecx, [@@hitpos]
-	;xor edx, edx
-	;mov edx, [@@original_type]
+	mov ecx, [@@hitpos] ; move the passed position to the ecx register (ecx is used to acces the elements in the array on a given position)
 	
-	; check the orientation: left or right
-	mov edi, [@@orientation]
+	; check the orientation: left, right, up right or up left
+	mov edi, [@@orientation] ; move the passed orientation to the edi register (edi is used to check the current orientation)
 	cmp edi, 1
 	je @@check_right
 	cmp edi, 2
@@ -448,10 +489,10 @@ PROC hitDetection
 	je @@check_up_left
 	
 	@@check_right:
-		add ecx, 2
-		mov ebx, [dword ptr (esi + ecx*4)]
-		cmp ebx, edx
-		je @@remove
+		add ecx, 2 ; move 1 position to the right
+		mov ebx, [dword ptr (esi + ecx*4)] ; check the type of ball
+		cmp ebx, edx ; compare it to the type of the played ball
+		je @@remove ; remove if equal
 		jmp @@done
 	
 	@@check_left:
@@ -462,28 +503,59 @@ PROC hitDetection
 		jmp @@done
 	
 	@@check_up_right:
-		; check the type of the up right ball
-		; if it is of the same type as the original ball -> check right 
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
-		mov edi, 1
 		je @@remove 
 		jmp @@done 		
 
 	@@check_up_left:
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, edx
-		mov edi, 2
 		je @@remove 
 		jmp @@done
 
 	@@remove:
-		call hitDetection, ecx, edi ; first recursive
-		call removeBall, ecx ; remove ball after recursive function otherwise the ball on ecx would already be removed and the cmp between ecx and ebx would be false
+		mov [ball_hit], 1 ; indicate that the ball has been hit
+		; check the current orientation
 		cmp edi, 1
-		je @@check_right
+		je @@R
 		cmp edi, 2
-		je @@check_left	
+		je SHORT @@L
+		cmp edi, 3
+		je @@SRSL
+		cmp edi, 4
+		je @@SRSL
+
+		@@R:
+			; Right orientation -> check the right, upright and left ball for is these are of the same type => recursive
+			call hitDetection, ecx, 1 ; right
+			call removeBall, ecx ; remove the ball because it was of the same type as the played ball
+			sub ecx, 31 
+			call hitDetection, ecx, 3 ; up right
+			sub ecx, 2
+			call hitDetection, ecx, 4 ; up left
+			jmp @@done 
+		
+		@@L:
+			; Left orientation -> check the left, upright and left ball
+			call hitDetection, ecx, 2
+			call removeBall, ecx 
+			sub ecx, 31 
+			call hitDetection, ecx, 3 
+			sub ecx, 2
+			call hitDetection, ecx, 4 
+			jmp @@done
+
+		@@SRSL:
+			; Up right and up left orientation -> check the left, right, upright and upleft for same type -> we check the left and right orientation because we moved 1 row up
+			call hitDetection, ecx, 1 
+			call hitDetection, ecx, 2 
+			call removeBall, ecx 
+			sub ecx, 31 
+			call hitDetection, ecx, 3 
+			sub ecx, 2
+			call hitDetection, ecx, 4 
+			jmp @@done
 
 	@@done:
 		ret
@@ -583,25 +655,6 @@ PROC terminateProcess
 	
 	ret
 ENDP terminateProcess
-
-PROC displayString2		; ONLINE GEVONDEN
-	ARG @@offset:dword, @@x:dword, @@y:dword
-	USES eax, ebx, edx
-	
-	mov edx, [@@y] 		; row in EDX
-	mov ebx, [@@x] 		; column in EBX
-	mov ah, 02h			; set cursor position
-	shl edx, 08h		; row in DH (00H is top)
-	mov dl, bl 			; column in DL (00H is left)
-	mov bh, 0 			; page number in BH
-	int 10h 			; raise interrupt
-	mov ah, 09h 		; write string to standard output
-	mov edx, [@@offset] ; offset of ’$’-terminated string in EDX
-	int 21h 			; raise interrupt
-	ret
-ENDP displayString2
-
-
 ;	number	ascii
 ;	0		48
 ;	1		49
@@ -613,15 +666,60 @@ ENDP displayString2
 ;	7		55
 ;	8		56
 ;	9		57
+PROC incScore2
+	ARG @@score:dword
+	USES edi, eax
+	mov edi, [@@score]
+	inc edi		;pointer
+	cmp [dword ptr edi], 48
+	je @@decade
+	dec [dword ptr edi]
+	jmp @@done
+	@@decade:
+		mov [dword ptr edi], 57
+		dec edi
+		dec [dword ptr edi]
+	@@done:
+	ret
+ENDP incScore2
+
+31h
 
 PROC incScore
 	ARG @@score:dword
-	USES edi
-	mov edi, [@@score];pointer
-	inc [dword ptr edi]
-
+	USES edi, eax, ecx
+	xor eax, eax
+	mov edi, [@@score]
+	;inc edi		;pointer
+	mov eax, [dword ptr edi + 2*ecx]
+	cmp eax, 48
+	je @@decade
+	dec [dword ptr edi]
+	jmp @@done
+	@@decade:
+		mov [dword ptr edi], 57
+		dec edi
+		dec [dword ptr edi]
+	@@done:
 	ret
 ENDP incScore
+
+PROC displayString2
+	ARG @@offset:DWORD, @@x:dword, @@y:dword
+	USES EAX, EBX, EDX
+	
+	MOV EDX, [@@y] 		; row in EDX
+	MOV EBX, [@@x] 		; column in EBX
+	MOV AH, 02H			; set cursor position
+	SHL EDX, 08H 		; row in DH (00H is top)
+	MOV DL, BL 			; column in DL (00H is left)
+	MOV BH, 0 			; page number in BH
+	INT 10H 			; raise interrupt
+	MOV AH, 09H 		; write string to standard output
+	MOV EDX, [@@offset] ; offset of ’$’-terminated string in EDX
+	INT 21H 			; raise interrupt
+	RET
+ENDP displayString2
 
 ; -------------------------------------------------------------------
 ; MAIN
@@ -632,65 +730,52 @@ PROC main
 	
 	push ds
 	pop	es
-
-	call setVideoMode, 13h
-	call updateColourPalette, 54 , offset palette
-	;open, read and draw background
-	call openFile, offset bgfile, offset bghandle
-	call readChunk, FRAMESIZE, offset bghandle, offset bgframe
-	call __keyb_installKeyboardHandler	
-
-	call drawBackground, offset buffer, offset bgframe
-	call displayString2, offset score,0Ch,07h
-		
-	call incScore, offset score
-	call displayString2, offset score,0Ch,07h
-	call incScore, offset score
-	call displayString2, offset score,0Ch,07h
-	call incScore, offset score
-	call displayString2, offset score,0Ch,07h
 	
-	@@loep:
-		mov cl, [__keyb_rawScanCode] ;last pressed key
-		cmp cl, 01h
-		je @@done
-		cmp cl, 02h
-		je @@increment
-		
-	jmp @@loep
+	call initialize
+
+	; initialize starting parameters
+	mov [startBall_pos], SHOOTBALL_STARTPOS
+	mov [startBall_type], SHOOTBALL_STARTTYPE
+	call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
 	
+	call incScore, offset score
 	
-	@@increment:
-		call incScore, offset score
-		call displayString2, offset score,0Ch,07h
-		call incScore, offset score
-		call displayString2, offset score,0Ch,07h
-		jmp @@loep
-		
+	call displayString2, offset score, 01h ,07h
 
-	@@done:
-	;open, read and different balls
-	;;call openFile, offset blueballfile, offset blueballhandle
-	;;call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
-	;;call openFile, offset greenballfile, offset greenballhandle
-	;;call readChunk, BALLSIZE, offset greenballhandle, offset greenballframe
-	;;call openFile, offset pinkballfile, offset pinkballhandle
-	;;call readChunk, BALLSIZE, offset pinkballhandle, offset pinkballframe
-	;;call openFile, offset yellowballfile, offset yellowballhandle
-	;;call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
+	@@keyboardLoop:
+		call displayString2, offset score,01h,07h
+		mov al, [__keyb_rawScanCode] ;last pressed key
+		cmp al, 02h ; left arow key
+		je @@moveStartBallLeft
+		cmp al, 4Dh ; right arrow key
+		je @@moveStartBallRight
+		cmp al, 39h ; space key
+		je @@shootStartBall
+		cmp al, 01h ; escape key
+		je @@exit
+		jmp @@keyboardLoop
 
+		@@moveStartBallLeft:
+			call incScore, offset score
+			
+			call moveStartBall, offset arr_screen, 0
+			jmp @@keyboardLoop
+		@@moveStartBallRight:
+			call moveStartBall, offset arr_screen, 1
+			jmp @@keyboardLoop
+		@@shootStartBall:
+			call shootStartBall, offset arr_screen
+			call resetStartBall, offset arr_screen
+			jmp @@keyboardLoop
 
-	;call updateArray, offset arr_screen, 15
-	;call updateArray, offset arr_screen, 15
-	;call updateArray, offset arr_screen, 15
-	;call updateArray, offset arr_screen, 9
+	
+	@@exit:
+		call refreshVideo
 
-	;call refreshVideo
+		call __keyb_uninstallKeyboardHandler
 
-	;call displayString, offset startmsg1,0Ch,07h
-	call __keyb_uninstallKeyboardHandler
-	;call	waitForSpecificKeystroke, 001Bh
-	call	terminateProcess
+		;call	waitForSpecificKeystroke, 001Bh
+		call	terminateProcess
 
 
 ENDP main
@@ -712,29 +797,32 @@ UDATASEG
 	bgframe db FRAMESIZE dup (?)
 	
 	buffer db FRAMESIZE dup (?)
-	
 ; -------------------------------------------------------------------
 ; DATA
 ; -------------------------------------------------------------------
 DATASEG
-	startmsg1	db "Pres enter to play", 13, 10, '$'
-	startmsg2	db "Po play", 13, 10, '$'
-
     ; Vars
     f ball <,,>
-	score 	db 48, '$'
+	
+	score 	db 57,48, '$'
 
+	ball_hit dd 0
+	
+	startBall_pos dd 0
+	startBall_type dd 0
+
+	upper_rows dd 0
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
 				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 4
-				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
-				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 6
-				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
-				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
+				dd 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 5
+				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
+				dd 2, 0, 2, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
+				dd 0, 2, 0, 2, 0, 1, 0, 1, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
+				dd 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 12
@@ -805,8 +893,8 @@ DATASEG
 	bgfile				db "bg.bin", 0
 	blueballfile		db "blueball.bin", 0
 	greenballfile		db "blueball.bin", 0
-	pinkballfile		db "blueball.bin", 0
 	yellowballfile		db "blueball.bin", 0
+	pinkballfile		db "blueball.bin", 0
 
     ; Error Messages
 	openErrorMsg 	db "could not open file", 13, 10, '$'
