@@ -175,21 +175,29 @@ PROC main
 	cld
 
 	call rand_init
+	
+	;KEYBOARD MEMES------------------------------------------
 	call __keyb_installKeyboardHandler
 	
-	@@goAgain:
+	@@Action:
 	call StartGrid, offset arrlen, [color1], [color2]
 	call printIntList, offset arrlen
 	
-	@@loopje:
+	@@nothingPressed:
 	mov al, [__keyb_rawScanCode] ;last pressed key
-	cmp al, 02h
-	je @@goAgain
-	cmp al, 01h
-	jne @@loopje
+	cmp al, 11h  ;check for w FORWARD
+	je @@Action
+	cmp al, 1eh  ;check for a LEFT
+	je @@Action
+	cmp al, 1fh  ;check for s BACKWARD
+	je @@Action
+	cmp al, 20h  ;check for d RIGHT
+	je @@Action
+	cmp al, 01h  ;check for esc
+	jne @@nothingPressed ;no esc? ctu
 
 	call __keyb_uninstallKeyboardHandler
-
+	;KEYBOARD MEMES-----------------------------------------
 
 	mov	ax,4C00h 	; terminate
 	int 21h
