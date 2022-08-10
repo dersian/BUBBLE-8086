@@ -683,18 +683,20 @@ PROC incScore2
 	ret
 ENDP incScore2
 
-31h
+
 
 PROC incScore
 	ARG @@score:dword
 	USES edi, eax, ecx
 	xor eax, eax
 	mov edi, [@@score]
-	;inc edi		;pointer
-	mov eax, [dword ptr edi + 2*ecx]
-	cmp eax, 48
+	mov eax, [edi]
+	inc edi		;pointer
+	movzx eax, [byte ptr edi]
+	cmp eax, 49
 	je @@decade
-	dec [dword ptr edi]
+	dec eax
+	mov [dword ptr (edi + ecx)], eax
 	jmp @@done
 	@@decade:
 		mov [dword ptr edi], 57
