@@ -584,6 +584,45 @@ PROC terminateProcess
 	ret
 ENDP terminateProcess
 
+PROC displayString2		; ONLINE GEVONDEN
+	ARG @@offset:dword, @@x:dword, @@y:dword
+	USES eax, ebx, edx
+	
+	mov edx, [@@y] 		; row in EDX
+	mov ebx, [@@x] 		; column in EBX
+	mov ah, 02h			; set cursor position
+	shl edx, 08h		; row in DH (00H is top)
+	mov dl, bl 			; column in DL (00H is left)
+	mov bh, 0 			; page number in BH
+	int 10h 			; raise interrupt
+	mov ah, 09h 		; write string to standard output
+	mov edx, [@@offset] ; offset of ’$’-terminated string in EDX
+	int 21h 			; raise interrupt
+	ret
+ENDP displayString2
+
+
+;	number	ascii
+;	0		48
+;	1		49
+;	2		50
+;	3		51
+;	4		52
+;	5		53
+;	6		54
+;	7		55
+;	8		56
+;	9		57
+
+PROC incScore
+	ARG @@score:dword
+	USES edi
+	mov edi, [@@score];pointer
+	inc [dword ptr edi]
+
+	ret
+ENDP incScore
+
 ; -------------------------------------------------------------------
 ; MAIN
 ; -------------------------------------------------------------------
@@ -602,38 +641,55 @@ PROC main
 	call __keyb_installKeyboardHandler	
 
 	call drawBackground, offset buffer, offset bgframe
+	call displayString2, offset score,0Ch,07h
+		
+	call incScore, offset score
+	call displayString2, offset score,0Ch,07h
+	call incScore, offset score
+	call displayString2, offset score,0Ch,07h
+	call incScore, offset score
+	call displayString2, offset score,0Ch,07h
+	
+	@@loep:
+		mov cl, [__keyb_rawScanCode] ;last pressed key
+		cmp cl, 01h
+		je @@done
+		cmp cl, 02h
+		je @@increment
+		
+	jmp @@loep
+	
+	
+	@@increment:
+		call incScore, offset score
+		call displayString2, offset score,0Ch,07h
+		call incScore, offset score
+		call displayString2, offset score,0Ch,07h
+		jmp @@loep
+		
 
-	@@loopje:
-	call displayString, offset startmsg1,0Ch,07h
-	mov al, [__keyb_rawScanCode] ;last pressed key
-	;cmp al, 02h
-	;je @@goAgain
-	cmp al, 01h
-	jne @@loopje
-
-
+	@@done:
 	;open, read and different balls
-	call openFile, offset blueballfile, offset blueballhandle
-	call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
-	call openFile, offset greenballfile, offset greenballhandle
-	call readChunk, BALLSIZE, offset greenballhandle, offset greenballframe
-	call openFile, offset pinkballfile, offset pinkballhandle
-	call readChunk, BALLSIZE, offset pinkballhandle, offset pinkballframe
-	call openFile, offset yellowballfile, offset yellowballhandle
-	call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
+	;;call openFile, offset blueballfile, offset blueballhandle
+	;;call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
+	;;call openFile, offset greenballfile, offset greenballhandle
+	;;call readChunk, BALLSIZE, offset greenballhandle, offset greenballframe
+	;;call openFile, offset pinkballfile, offset pinkballhandle
+	;;call readChunk, BALLSIZE, offset pinkballhandle, offset pinkballframe
+	;;call openFile, offset yellowballfile, offset yellowballhandle
+	;;call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
 
 
-	;call decodeArray, offset arr_screen
-	call updateArray, offset arr_screen, 15
-	call updateArray, offset arr_screen, 15
-	call updateArray, offset arr_screen, 15
-	call updateArray, offset arr_screen, 9
+	;call updateArray, offset arr_screen, 15
+	;call updateArray, offset arr_screen, 15
+	;call updateArray, offset arr_screen, 15
+	;call updateArray, offset arr_screen, 9
 
-	call refreshVideo
+	;call refreshVideo
 
-	call displayString, offset startmsg1,0Ch,07h
+	;call displayString, offset startmsg1,0Ch,07h
 	call __keyb_uninstallKeyboardHandler
-	call	waitForSpecificKeystroke, 001Bh
+	;call	waitForSpecificKeystroke, 001Bh
 	call	terminateProcess
 
 
@@ -656,16 +712,17 @@ UDATASEG
 	bgframe db FRAMESIZE dup (?)
 	
 	buffer db FRAMESIZE dup (?)
+	
 ; -------------------------------------------------------------------
 ; DATA
 ; -------------------------------------------------------------------
 DATASEG
 	startmsg1	db "Pres enter to play", 13, 10, '$'
-
+	startmsg2	db "Po play", 13, 10, '$'
 
     ; Vars
     f ball <,,>
-
+	score 	db 48, '$'
 
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
