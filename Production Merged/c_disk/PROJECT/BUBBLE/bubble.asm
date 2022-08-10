@@ -6,6 +6,9 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 ; -------------------------------------------------------------------
 ; MACROS + INCLUDES
 ; -------------------------------------------------------------------
+INCLUDE "keyb.inc"
+
+
 VMEMADR EQU 0A0000h	; video memory address
 FRAMEWIDTH EQU 320	; screen witdth
 FRAMEHEIGHT EQU 200	; screen height
@@ -25,8 +28,9 @@ BALLSIZE EQU BALLHEIGHT*BALLWIDTH
 BALL_XSTART EQU 64
 BALL_YSTART EQU 5
 
-SHOOTBALL_STARTPOS EQU 496 ; Absolute startpos
-SHOOTBALL_STARTX EQU 15 ; Xcord of startpos
+SHOOTBALL_STARTPOS EQU 496 ; Absolute starting position of the shooting ball
+SHOOTBALL_STARTX EQU 15 ; Starting xcord of the shooting ball
+SHOOTBALL_STARTTYPE EQU 1 ; Starting ball type of the shooting ball
 
 INCLUDE "keyb.inc" 
 
@@ -110,6 +114,30 @@ PROC updateColourPalette
 
 	ret
 ENDP updateColourPalette
+; -------------------------------------------------------------------
+; INITIALIZING
+; -------------------------------------------------------------------
+PROC initialize 
+	call __keyb_installKeyboardHandler
+
+	call setVideoMode, 13h
+	call updateColourPalette, 54 , offset palette
+	;open, read and draw background
+	call openFile, offset bgfile, offset bghandle
+	call readChunk, FRAMESIZE, offset bghandle, offset bgframe
+	call drawBackground, offset buffer, offset bgframe
+	;open, read and different balls
+	call openFile, offset blueballfile, offset blueballhandle
+	call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
+	call openFile, offset greenballfile, offset greenballhandle
+	call readChunk, BALLSIZE, offset greenballhandle, offset greenballframe
+	call openFile, offset pinkballfile, offset pinkballhandle
+	call readChunk, BALLSIZE, offset pinkballhandle, offset pinkballframe
+	call openFile, offset yellowballfile, offset yellowballhandle
+	call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
+
+	ret 
+ENDP initialize
 ; -------------------------------------------------------------------
 ; RANDOM
 ; -------------------------------------------------------------------
@@ -237,7 +265,7 @@ PROC drawBall
 ENDP drawBall
 
 ; -------------------------------------------------------------------
-; ARRAY/UPDATE PROCEDURES
+; ARRAY/UPDATE/MOVE PROCEDURES
 ; -------------------------------------------------------------------
 ; decode ARRAY
 PROC decodeArray
@@ -301,79 +329,29 @@ PROC decodeArray
 		ret
 ENDP decodeArray
 
-; update ARRAY with corresponding path per timer count (simple ball movement)
+; update ARRAY: place ball of given type at a given position and choose to check hit detection or not
 PROC updateArray
-	ARG @@arr:dword, @@path:dword
+	ARG @@arr:dword, @@position:dword, @@ball_type:dword, @@hitDetectionCheck:dword
 	USES edx, eax, ebx, ecx, esi, edi
-
-	mov esi, [@@arr] ; store array
-	mov edi, SHOOTBALL_STARTPOS ; load in start position of the shooting ball
-	mov ebx, [@@path] ; load in given path
+	; load in given parameters
+	mov esi, [@@arr]
 	xor ecx, ecx
-	xor eax, eax
-
-	; movement orientation
-	cmp ebx, SHOOTBALL_STARTX ; 1 left from center
-	je @@up ; ebx = 16? -> recht naar boven
-	jg @@right ; ebx > 16? -> rechts
-	jmp @@left ; ebx < 16? -> links
+	mov ecx, [@@position]
+	mov ebx, [@@ball_type]
+	; place the ball in the array
+	call drawBackground, offset buffer, offset bgframe
+	call timer, 8
+	mov [dword ptr (esi + ecx*4)], ebx
+	call decodeArray, [dword ptr esi]
+	call refreshVideo
+	cmp [@@hitDetectionCheck], 1
+	je @@hitDetection
+	jmp @@done
 	
-	@@up:
-		call drawBackground, offset buffer, offset bgframe 
-		call timer, 8
-		inc ecx ; increase loop counter
-		mov [dword ptr (esi + edi*4)], 0 
-		sub edi, 32 
-		mov [dword ptr (esi + edi*4)], 1 
-		call decodeArray, [dword ptr esi] 
-		call refreshVideo
-		cmp ecx, 7
-		je @@hit_detection
-		jmp @@up
-
-	@@right:
-		;calculate amount of steps to take, #steps=counter(ecx)
-		mov ecx, SHOOTBALL_STARTX ; 
-		sub ebx, ecx
-		mov ecx, ebx
-		; start with sideways movement
-		jmp @@right_sideways
-		
-		@@right_sideways:
-			call drawBackground, offset buffer, offset bgframe 
-			call timer, 8
-			mov [dword ptr (esi + edi*4)], 0 
-			add edi, 1
-			mov [dword ptr (esi + edi*4)], 1 
-			call decodeArray, [dword ptr esi] 
-			call refreshVideo
-			dec ecx
-			cmp ecx, 0
-			je @@up
-			jmp @@right_sideways
-
-	@@left:
-		mov ecx, SHOOTBALL_STARTX ; 
-		sub ecx, ebx
-		jmp @@left_sideways
-		
-		@@left_sideways:
-			call drawBackground, offset buffer, offset bgframe 
-			call timer, 8
-			mov [dword ptr (esi + edi*4)], 0 
-			sub edi, 1
-			mov [dword ptr (esi + edi*4)], 1 
-			call decodeArray, [dword ptr esi] 
-			call refreshVideo
-			dec ecx
-			cmp ecx, 0
-			je @@up
-			jmp @@left_sideways
-
-	@@hit_detection:
+	@@hitDetection:
 		mov [ball_hit], 0 ; reset global variable -> used to check if the played ball has hit any balls of the same type -> remove if yes
-		xor ecx, ecx 
-		mov ecx, edi ; put the position of the current ball in ecx
+		;xor ecx, ecx 
+		;mov ecx, edi ; put the position of the current ball in ecx
 		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the played ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
 		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function	
 		call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
@@ -382,14 +360,16 @@ PROC updateArray
 		call hitDetection, ecx, 3 ; 3 = up right
 		sub ecx, 2 ; move 1 position to the left
 		call hitDetection, ecx, 4 ; 4 = up left
-		
+
 		cmp [ball_hit], 1 ; check if the played ball had a succesfull hit detection
 		je @@remove_played_ball ; if yes remove the played ball otherwise leave it
 		jmp @@done
-		
+
 		@@remove_played_ball:
 			add ecx, 33 ; reset the position to the position of the playe ball
 			call removeBall, ecx
+		
+
 		
 	@@done:
 		ret
@@ -408,6 +388,86 @@ PROC removeBall
 
 	ret
 ENDP removeBall
+
+; Moves the shooting/start bal of a given type 1 position in the desired direction
+PROC moveStartBall
+	ARG @@arr:dword, @@orientation:dword
+	USES ecx, esi
+	
+	mov esi, [@@arr]
+	; first remove the start ball
+	call removeBall, [startBall_pos]
+
+	; check orientation and place start ball on the new position
+	cmp [@@orientation], 0 ; left
+	je @@move_left
+	cmp [@@orientation], 1 ; right
+	je @@move_right
+	jmp @@done
+	
+	@@move_left:
+		sub [startBall_pos], 2
+		mov ecx, [startBall_pos]
+		call updateArray, esi, [startBall_pos], [startBall_type], 0
+		jmp @@done
+
+	@@move_right:
+		add [startBall_pos], 2
+		mov ecx, [startBall_pos]
+		call updateArray, esi, [startBall_pos], [startBall_type], 0
+		jmp @@done
+	
+	@@done:
+		ret
+ENDP moveStartBall
+
+PROC shootStartBall
+	ARG @@arr:dword
+	USES eax, ebx, ecx
+	
+	mov esi, [@@arr]
+	xor ebx, ebx ; use ebx to count the amount of rows that we need to move up
+	xor ecx, ecx
+	mov ecx, [startBall_pos]
+	jmp @@count_upper_rows
+
+	@@count_upper_rows:
+		sub ecx, 32
+		mov eax, [dword ptr (esi + ecx*4)]
+		cmp eax, 0
+		ja @@continue ; jump if above
+		inc ebx
+		jmp @@count_upper_rows
+	
+	@@continue:
+		sub ebx, 1
+		xor ecx, ecx
+		mov ecx, [startBall_pos]
+		jmp @@up
+		
+		@@up:
+			call removeBall, ecx ; first remove ball
+			sub ecx, 32
+			call updateArray, esi, ecx, [startBall_type], 1 ; fill array with corresponding ball WITH hit detection enabled
+			dec ebx
+			cmp ebx, 0
+			je @@done
+			jmp @@up
+
+	@@done:
+		ret
+ENDP shootStartBall
+
+PROC resetStartBall
+	ARG @@arr:dword
+	USES eax, ebx, ecx, edx, edi
+	
+	mov esi, [@@arr]
+	; mov [startBall_pos], RANDOM CIJFER TUSSEN 1 en 4 -> call random
+	call updateArray, esi, [startBall_pos], [startBall_type], 1
+
+	ret
+ENDP resetStartBall
 ; -------------------------------------------------------------------
 ; EXTRA PROCEDURES
 ; -------------------------------------------------------------------
@@ -605,30 +665,45 @@ PROC main
 	
 	push ds
 	pop	es
+	
+	call initialize
 
-	call setVideoMode, 13h
-	call updateColourPalette, 54 , offset palette
-	;open, read and draw background
-	call openFile, offset bgfile, offset bghandle
-	call readChunk, FRAMESIZE, offset bghandle, offset bgframe
-	call drawBackground, offset buffer, offset bgframe
-	;open, read and different balls
-	call openFile, offset blueballfile, offset blueballhandle
-	call readChunk, BALLSIZE, offset blueballhandle, offset blueballframe
-	call openFile, offset greenballfile, offset greenballhandle
-	call readChunk, BALLSIZE, offset greenballhandle, offset greenballframe
-	call openFile, offset pinkballfile, offset pinkballhandle
-	call readChunk, BALLSIZE, offset pinkballhandle, offset pinkballframe
-	call openFile, offset yellowballfile, offset yellowballhandle
-	call readChunk, BALLSIZE, offset yellowballhandle, offset yellowballframe
+	; initialize starting parameters
+	mov [startBall_pos], SHOOTBALL_STARTPOS
+	mov [startBall_type], SHOOTBALL_STARTTYPE
+	call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
+	
+	@@keyboardLoop:
+		mov al, [__keyb_rawScanCode] ;last pressed key
+		cmp al, 4Bh ; left arow key
+		je @@moveStartBallLeft
+		cmp al, 4Dh ; right arrow key
+		je @@moveStartBallRight
+		cmp al, 39h ; space key
+		je @@shootStartBall
+		cmp al, 01h ; escape key
+		je @@exit
+		jmp @@keyboardLoop
 
-	;call decodeArray, offset arr_screen
-	call updateArray, offset arr_screen, 5
+		@@moveStartBallLeft:
+			call moveStartBall, offset arr_screen, 0
+			jmp @@keyboardLoop
+		@@moveStartBallRight:
+			call moveStartBall, offset arr_screen, 1
+			jmp @@keyboardLoop
+		@@shootStartBall:
+			call shootStartBall, offset arr_screen
+			call resetStartBall, offset arr_screen
+			jmp @@keyboardLoop
 
-	call refreshVideo
+	
+	@@exit:
+		call refreshVideo
 
-	call	waitForSpecificKeystroke, 001Bh
-	call	terminateProcess
+		call __keyb_uninstallKeyboardHandler
+
+		;call	waitForSpecificKeystroke, 001Bh
+		call	terminateProcess
 
 
 ENDP main
@@ -658,6 +733,11 @@ DATASEG
     f ball <,,>
 	
 	ball_hit dd 0
+	
+	startBall_pos dd 0
+	startBall_type dd 0
+
+	upper_rows dd 0
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
