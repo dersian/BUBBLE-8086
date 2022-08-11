@@ -692,13 +692,15 @@ PROC incScore
 	; juiste manier om byte array in te laden, en 1 positie te verschuiven en data te verkrijgen terug:
 	; ---
 	mov edi, [@@score]
-	mov eax, [edi]
 	inc edi		;pointer
 	movzx eax, [byte ptr edi]
 	; ---
-	cmp eax, 49
-	je @@decade
-	dec eax
+	;cmp eax, 30h
+	;je @@decade
+	
+	dec eax ;
+	;mov [edi], 48
+	
 	;mov [dword ptr (edi + ecx)], eax -> niet juiste manier dus
 	jmp @@done
 	@@decade:
@@ -726,6 +728,38 @@ PROC displayString2
 	RET
 ENDP displayString2
 
+PROC drawScore
+	USES edi,edx,eax, ebx, ecx
+	mov ah,02h	;set cursor position
+	mov bh,00h	;page number
+	mov dh,01h	;row
+	mov dl,013h	;column
+	int 10h
+	
+	mov eax,[skore]
+	mov	ebx, 10		; divider
+	xor ecx, ecx	; counter for digits to be printed
+
+	; Store digits on stack
+	@@getNextDigit:
+	inc	ecx         ; increase digit counter
+	xor edx, edx
+	div	ebx   		; divide by 10
+	push dx			; store remainder on stack
+	test eax, eax	; {cmp eax, 0} check whether zero?
+	jnz	@@getNextDigit
+
+    ; Write all digits to the standard output
+	mov	ah, 2h 		; Function for printing single characters.
+	@@printDigits:		
+	pop dx
+	add	dl,'0'      	; Add 30h => code for a digit in the ASCII table, ...
+	int	21h            	; Print the digit to the screen, ...
+	loop @@printDigits	; Until digit counter = 0.
+
+	ret
+ENDP drawScore
+
 ; -------------------------------------------------------------------
 ; MAIN
 ; -------------------------------------------------------------------
@@ -743,12 +777,12 @@ PROC main
 	mov [startBall_type], SHOOTBALL_STARTTYPE
 	call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
 	
-	call incScore, offset score
+	;call incScore, offset score
 	
-	call displayString2, offset score, 01h ,07h
+	;call displayString2, offset score, 01h ,07h
 
 	@@keyboardLoop:
-		call displayString2, offset score,01h,07h
+		;call displayString2, offset score,01h,07h
 		mov al, [__keyb_rawScanCode] ;last pressed key
 		cmp al, 02h ; left arow key
 		je @@moveStartBallLeft
@@ -761,8 +795,8 @@ PROC main
 		jmp @@keyboardLoop
 
 		@@moveStartBallLeft:
-			call incScore, offset score
-			
+			;call incScore, offset score
+			call drawScore
 			call moveStartBall, offset arr_screen, 0
 			jmp @@keyboardLoop
 		@@moveStartBallRight:
@@ -809,7 +843,8 @@ DATASEG
     ; Vars
     f ball <,,>
 	
-	score 	db 57,48, '$'
+	score 	db 57,57, '$'
+	skore dd 244
 
 	ball_hit dd 0
 	
