@@ -340,7 +340,7 @@ PROC updateArray
 	mov ebx, [@@ball_type]
 	; place the ball in the array
 	call drawBackground, offset buffer, offset bgframe
-	call timer, 3
+	call timer, 2
 	mov [dword ptr (esi + ecx*4)], ebx
 	call decodeArray, [dword ptr esi]
 	call refreshVideo
@@ -357,11 +357,14 @@ PROC updateArray
 		; if the position is max left or max right -> skip hit detection partially
 		mov edi, edx ; temp save edx in edi so we can use edx to perform the modulo operation
 		xor edx, edx ; clear edx for modulo
-		mov eax, 32 ; divide by eax
-		div ecx ; divide ecx by eax (32)
-		cmp edx, 31; ecx is max left position? -> ex: 479/32 -> mod = 31
+		xor ebx, ebx
+		xor eax, eax
+		mov eax, ecx ; dividend
+		mov ebx, 32 ; divisor
+		div ebx ; divide ecx by ebx (32)
+		cmp edx, 0; ecx is max left position? -> ex: 480/32 -> mod = 0
 		je @@max_left
-		cmp edx , 0 ; ecx is max right position -> ex: 512/32 -> mod = 0
+		cmp edx , 31 ; ecx is max right position -> ex: 511/32 -> mod = 31
 		je @@max_right
 		jmp @@normal
 		
@@ -376,23 +379,18 @@ PROC updateArray
 			call hitDetection, ecx, 4 ; 4 = up left
 			jmp @@check_hit_detection
 		
-		@@max_left: ; skip left and up left hit detection
+		@@max_left: ; skip left and up left hit detection -> special case in hit detection function: 5 
 			xor edx, edx
 			mov edx, edi 
-			call hitDetection, ecx, 1 ; check if the right (1) balls are hit (ecx = position of newly played ball)
-			sub ecx, 31 ; move 1 row up and 1 to the right (32-1)
-			call hitDetection, ecx, 3 ; 3 = up right
+			call hitDetection, ecx, 5
+			mov [hitDetection_state], 5
 			jmp @@check_hit_detection
 		
 		@@max_right:
 			xor edx, edx
 			mov edx, edi
-			call hitDetection, ecx, 2 ; 2 = left
-			sub ecx, 31 ; move 1 row up and 1 to the right (32-1)
-			sub ecx, 2 ; move 1 position to the left
-			call hitDetection, ecx, 4 ; 4 = up left
+			call hitDetection, ecx, 6
 			jmp @@check_hit_detection
-
 
 		@@check_hit_detection:
 			cmp [ball_hit], 1 ; check if the played ball had a succesfull hit detection
@@ -400,8 +398,14 @@ PROC updateArray
 			jmp @@done
 
 		@@remove_played_ball:
-			add ecx, 33 ; reset the position to the position of the playe ball
+			cmp [hitDetection_state], 5
+			je @@left
+			add ecx, 33 ; reset the position to the position of the played ball
 			call removeBall, ecx
+
+			@@left:
+				;add ecx, 31
+				call removeBall, ecx
 		
 
 		
@@ -467,7 +471,6 @@ PROC shootStartBall
 	xor ebx, ebx ; use ebx to count the amount of rows that we need to move up
 	xor ecx, ecx
 	mov ecx, [startBall_pos]
-	xor edx, edx
 	jmp @@count_upper_rows
 
 	; count the rows to go up
@@ -481,6 +484,18 @@ PROC shootStartBall
 	
 	; check if left or right places are empty or not -> know when to shift or go a place back
 	@@check_sides:
+		; special cases -> if we are at the max left or max right position of the grid
+		xor edx, edx ; clear edx for modulo
+		xor eax, eax
+		xor edi, edi
+		mov eax, ecx ; dividend
+		mov edi, 32 ; divisor
+		div edi ; divide ecx by eax (32)
+		cmp edx, 0; ecx is max left position? -> ex: 480/32 -> mod = 0
+		je @@special_left
+		cmp edx , 31 ; ecx is max right position -> ex: 511/32 -> mod = 31
+		je @@special_right
+		; other cases 
 		add ecx, 33 ; right
 		mov edi, [dword ptr (esi + ecx*4)]
 		cmp edi, 0 
@@ -491,6 +506,32 @@ PROC shootStartBall
 		je @@set_shift_left
 		sub ebx, 1
 		jmp @@continue
+
+		; 2 possibilities (for max left ex, same for max right but opposite direction):
+		; case 1:
+		; 	1, 0, 2
+		; 	0, 2, 0
+		;	| ball comes from max left position
+		; 	-> we check the right and see that there is a ball so we need to move 1 row down
+		; case 2:
+		; 	1, 0, 2
+		; 	0, 0, 0
+		; 	| 
+		; 	-> we check the right and see that there is no ball so we need to shift to the right
+		@@special_left:
+			add ecx, 33 
+			mov edi, [dword ptr (esi + ecx*4)]
+			cmp edi, 0 
+			je @@set_shift_right
+			sub ebx, 1
+			jmp @@continue
+		@@special_right:
+			add ecx, 31
+			mov edi, [dword ptr (esi + ecx*4)]
+			cmp edi, 0 
+			je @@set_shift_left
+			sub ebx, 1
+			jmp @@continue
 
 		@@set_shift_left:
 			mov edx, 1
@@ -559,6 +600,7 @@ PROC hitDetection
 	
 	; check the orientation: left, right, up right or up left
 	mov edi, [@@orientation] ; move the passed orientation to the edi register (edi is used to check the current orientation)
+	mov [hitDetection_state], edi ; global variable to check the hit detection state
 	cmp edi, 1
 	je @@check_right
 	cmp edi, 2
@@ -567,6 +609,10 @@ PROC hitDetection
 	je @@check_up_right
 	cmp edi, 4
 	je @@check_up_left
+	cmp edi, 5
+	je @@check_up_right ; max left position
+	cmp edi, 6
+	je @@check_up_left ; max right position
 	
 	@@check_right:
 		add ecx, 2 ; move 1 position to the right
@@ -605,9 +651,13 @@ PROC hitDetection
 		je @@SRSL
 		cmp edi, 4
 		je @@SRSL
+		cmp edi, 5
+		je @@max_left
+		cmp edi, 6
+		je @@max_right
 
 		@@R:
-			; Right orientation -> check the right, upright and left ball for is these are of the same type => recursive
+			; right orientation -> check the right, upright and left ball for is these are of the same type => recursive
 			call hitDetection, ecx, 1 ; right
 			call removeBall, ecx ; remove the ball because it was of the same type as the played ball
 			sub ecx, 31 
@@ -617,17 +667,17 @@ PROC hitDetection
 			jmp @@done 
 		
 		@@L:
-			; Left orientation -> check the left, upright and left ball
+			; left orientation -> check the left, upright and left ball
 			call hitDetection, ecx, 2
 			call removeBall, ecx 
 			sub ecx, 31 
 			call hitDetection, ecx, 3 
 			sub ecx, 2
 			call hitDetection, ecx, 4 
-			jmp @@done
+			jmp SHORT @@done
 
 		@@SRSL:
-			; Up right and up left orientation -> check the left, right, upright and upleft for same type -> we check the left and right orientation because we moved 1 row up
+			; up right and up left orientation -> check the left, right, upright and upleft for same type -> we check the left and right orientation because we moved 1 row up
 			call hitDetection, ecx, 1 
 			call hitDetection, ecx, 2 
 			call removeBall, ecx 
@@ -636,6 +686,22 @@ PROC hitDetection
 			sub ecx, 2
 			call hitDetection, ecx, 4 
 			jmp @@done
+		
+		@@max_left:
+			; max left orientation -> only check right and up right
+			call hitDetection, ecx, 1 
+			sub ecx, 31 
+			call hitDetection, ecx, 3
+			jmp @@done
+		
+		@@max_right:
+			; max right orientation -> only check left and upper left
+			call hitDetection, ecx, 2 
+			sub ecx, 31
+			sub ecx, 2 
+			call hitDetection, ecx, 4
+			jmp @@done
+			
 
 	@@done:
 		ret
@@ -813,6 +879,7 @@ DATASEG
     f ball <,,>
 	
 	ball_hit dd 0
+	hitDetection_state dd 0
 	
 	startBall_pos dd 0
 	startBall_type dd 0
@@ -826,8 +893,8 @@ DATASEG
 				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2 ; row 4
 				dd 2, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0 ; row 5
 				dd 0, 2, 0, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
-				dd 1, 0, 2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 7
-				dd 0, 2, 0, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 8
+				dd 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0 ; row 7
+				dd 0, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1 ; row 8
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
