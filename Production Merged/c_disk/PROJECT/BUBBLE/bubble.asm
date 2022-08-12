@@ -27,10 +27,15 @@ BALLSIZE EQU BALLHEIGHT*BALLWIDTH
 
 BALL_XSTART EQU 64
 BALL_YSTART EQU 5
+NEXTBALL_X EQU 30
+NEXTBALL_Y EQU 45
 
 SHOOTBALL_STARTPOS EQU 496 ; Absolute starting position of the shooting ball
 SHOOTBALL_STARTX EQU 15 ; Starting xcord of the shooting ball
 SHOOTBALL_STARTTYPE EQU 1 ; Starting ball type of the shooting ball
+
+RAND_A = 1103515245
+RAND_C = 12345
 
 INCLUDE "keyb.inc" 
 
@@ -118,6 +123,7 @@ ENDP updateColourPalette
 ; INITIALIZING
 ; -------------------------------------------------------------------
 PROC initialize 
+	call rand_init
 	call __keyb_installKeyboardHandler
 
 	call setVideoMode, 13h
@@ -141,7 +147,47 @@ ENDP initialize
 ; -------------------------------------------------------------------
 ; RANDOM
 ; -------------------------------------------------------------------
+PROC rand_init
+    USES    eax, ecx, edx
 
+    mov     ah, 02ch        ; Get system time
+    int     21h
+    mov     ax, dx          ; Use time to generate seed in EAX
+    shl     eax, 16
+    mov     ax, cx
+    mov     ah, 02ah        ; Get system date
+    int     21h
+    shl     ecx, 16         ; Mangle date into the seed in EAX
+    mov     cx, dx
+    xor     eax, ecx 
+    mov     [rand_seed], eax
+
+    ret
+ENDP rand_init
+
+PROC rand16
+    USES    edx
+
+    mov     eax, [rand_seed]
+    mov     edx, RAND_A
+    mul     edx
+    add     eax, RAND_C
+    mov     [rand_seed], eax
+	shr		eax, 30
+    inc eax
+	
+    ret
+ENDP rand16
+
+PROC randomType
+	uses eax
+	
+	call    rand16
+
+	mov [nextBall_type], eax
+
+	ret
+ENDP randomType
 ; -------------------------------------------------------------------
 ; TIMING
 ; -------------------------------------------------------------------
@@ -263,7 +309,6 @@ PROC drawBall
 	
 	ret 
 ENDP drawBall
-
 ; -------------------------------------------------------------------
 ; ARRAY/UPDATE/MOVE PROCEDURES
 ; -------------------------------------------------------------------
@@ -406,9 +451,6 @@ PROC updateArray
 			@@left:
 				;add ecx, 31
 				call removeBall, ecx
-		
-
-		
 	@@done:
 		ret
 ENDP updateArray
@@ -702,14 +744,75 @@ PROC hitDetection
 			call hitDetection, ecx, 4
 			jmp @@done
 			
-
 	@@done:
 		ret
 ENDP hitDetection
+
+PROC showNextBall
+	ARG @@newBall:dword
+	USES eax, ecx, edx
+
+	; set coordinates
+	mov [f.x], NEXTBALL_X
+	mov [f.y], NEXTBALL_Y
+	; get random number between 1-4 IF newball is true
+	cmp [@@newBall], 1
+	je @@get_random
+	jmp @@loopi
+	
+	@@get_random:
+		xor ecx, ecx
+		call randomType
+		jmp @@loopi
+
+	@@loopi:
+		cmp [nextBall_type], 0 ; compare array data -> decide not to print or color
+		je @@loopi ; if zero, skip 
+		cmp [nextBall_type], 1 ; draw blue ball
+		je @@drawBlue
+		cmp [nextBall_type], 2 ; draw green ball
+		je @@drawGreen
+		cmp [nextBall_type], 3 ; draw pink ball
+		je @@drawPink
+		cmp [nextBall_type], 4 ; draw yellow ball
+		je @@drawYellow
+
+		@@drawBlue:
+			call drawBall, offset blueballframe
+			jmp @@done
+		@@drawGreen:
+			call drawBall, offset greenballframe
+			jmp @@done
+		@@drawPink:
+			call drawBall, offset pinkballframe
+			jmp @@done
+		@@drawYellow:
+			call drawBall, offset yellowballframe
+			jmp @@done
+
+	@@done:
+		call refreshVideo
+		ret
+ENDP showNextBall
 ; -------------------------------------------------------------------
 ; SCORE PROCEDURES
 ; -------------------------------------------------------------------
-
+PROC displayString
+	ARG @@offset:DWORD, @@x:dword, @@y:dword
+	USES EAX, EBX, EDX
+	
+	MOV EDX, [@@y] 		; row in EDX
+	MOV EBX, [@@x] 		; column in EBX
+	MOV AH, 02H			; set cursor position
+	SHL EDX, 08H 		; row in DH (00H is top)
+	MOV DL, BL 			; column in DL (00H is left)
+	MOV BH, 0 			; page number in BH
+	INT 10H 			; raise interrupt
+	MOV AH, 09H 		; write string to standard output
+	MOV EDX, [@@offset] ; offset of ’$’-terminated string in EDX
+	INT 21H 			; raise interrupt
+	RET
+ENDP displayString
 ; -------------------------------------------------------------------
 ; FILE PROCEDURES
 ; -------------------------------------------------------------------
@@ -818,6 +921,8 @@ PROC main
 	mov [startBall_pos], SHOOTBALL_STARTPOS
 	mov [startBall_type], SHOOTBALL_STARTTYPE
 	call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
+	call showNextBall, 1
+	call displayString, offset nextball_msg, 02h, 04h
 	
 	@@keyboardLoop:
 		mov al, [__keyb_rawScanCode] ;last pressed key
@@ -833,16 +938,21 @@ PROC main
 
 		@@moveStartBallLeft:
 			call moveStartBall, offset arr_screen, 0
+			call showNextBall, 0
+			call displayString, offset nextball_msg, 02h, 04h
 			jmp @@keyboardLoop
 		@@moveStartBallRight:
 			call moveStartBall, offset arr_screen, 1
+			call showNextBall, 0
+			call displayString, offset nextball_msg, 02h, 04h
 			jmp @@keyboardLoop
 		@@shootStartBall:
 			call shootStartBall, offset arr_screen
 			call resetStartBall, offset arr_screen
+			call showNextBall, 1
+			call displayString, offset nextball_msg, 02h, 04h
 			jmp @@keyboardLoop
 
-	
 	@@exit:
 		call refreshVideo
 
@@ -885,6 +995,9 @@ DATASEG
 	startBall_type dd 0
 
 	upper_rows dd 0
+	
+	nextBall_type dd 0
+	rand_seed   dd ?
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
@@ -975,7 +1088,7 @@ DATASEG
 	closeErrorMsg 	db "error during file closing", 13, 10, '$'
 	
     ; Game Messages
-
+	nextball_msg	db "Next:", 13, 10, '$'
 	
 ; -------------------------------------------------------------------
 ; STACK
