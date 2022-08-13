@@ -8,34 +8,42 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 ; -------------------------------------------------------------------
 INCLUDE "keyb.inc"
 
-
+; Video 
 VMEMADR EQU 0A0000h	; video memory address
 FRAMEWIDTH EQU 320	; screen witdth
 FRAMEHEIGHT EQU 200	; screen height
 FRAMESIZE EQU FRAMEHEIGHT*FRAMEWIDTH
-
+; Screen Array 
 ARRWIDTH EQU 32
 ARRHEIGHT EQU 16
 ARRLEN EQU ARRWIDTH*ARRHEIGHT
 
+; Ball Drawing
 XOFFSET EQU 6
 YOFFSET EQU 10
-
 BALLWIDTH EQU 8 	
 BALLHEIGHT EQU 8
 BALLSIZE EQU BALLHEIGHT*BALLWIDTH
-
 BALL_XSTART EQU 64
 BALL_YSTART EQU 5
 NEXTBALL_X EQU 30
-NEXTBALL_Y EQU 45
-
+NEXTBALL_Y EQU 150
 SHOOTBALL_STARTPOS EQU 496 ; Absolute starting position of the shooting ball
 SHOOTBALL_STARTX EQU 15 ; Starting xcord of the shooting ball
 SHOOTBALL_STARTTYPE EQU 1 ; Starting ball type of the shooting ball
 
+; Message Positions
+NEXTBALL_MSG_X EQU 02h
+NEXTBALL_MSG_Y EQU 11h
+SCORE_MSG_X EQU 02h
+SCORE_MSG_Y EQU 0Ch
+
+; Random
 RAND_A = 1103515245
 RAND_C = 12345
+
+; Timer
+TIMER_CTE EQU 2
 
 INCLUDE "keyb.inc" 
 
@@ -384,8 +392,8 @@ PROC updateArray
 	mov ecx, [@@position]
 	mov ebx, [@@ball_type]
 	; place the ball in the array
-	call drawBackground, offset buffer, offset bgframe
-	call timer, 2
+	;call drawBackground, offset buffer, offset bgframe
+	;call timer, TIMER_CTE
 	mov [dword ptr (esi + ecx*4)], ebx
 	call decodeArray, [dword ptr esi]
 	call refreshVideo
@@ -461,9 +469,13 @@ PROC removeBall
 	
 	mov ecx, [@@removepos]
 	call drawBackground, offset buffer, offset bgframe 
-	call timer, 3
+	call timer, TIMER_CTE
 	mov [dword ptr (esi + ecx*4)], 0 
 	call decodeArray, [dword ptr esi] 
+	call showNextBall, 0
+	call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+	call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+	call timer, TIMER_CTE
 	call refreshVideo
 
 	ret
@@ -626,8 +638,7 @@ PROC resetStartBall
 	USES eax, ebx, ecx, edx, edi
 	
 	mov esi, [@@arr]
-	; mov [startBall_pos], RANDOM CIJFER TUSSEN 1 en 4 -> call random
-	call updateArray, esi, [startBall_pos], [startBall_type], 1
+	call updateArray, esi, [startBall_pos], [nextBall_type], 1
 
 	ret
 ENDP resetStartBall
@@ -922,7 +933,9 @@ PROC main
 	mov [startBall_type], SHOOTBALL_STARTTYPE
 	call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
 	call showNextBall, 1
-	call displayString, offset nextball_msg, 02h, 04h
+	call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+	call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+	;call timer, TIMER_CTE
 	
 	@@keyboardLoop:
 		mov al, [__keyb_rawScanCode] ;last pressed key
@@ -939,18 +952,23 @@ PROC main
 		@@moveStartBallLeft:
 			call moveStartBall, offset arr_screen, 0
 			call showNextBall, 0
-			call displayString, offset nextball_msg, 02h, 04h
+			call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+			call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+			;call timer, TIMER_CTE
 			jmp @@keyboardLoop
 		@@moveStartBallRight:
 			call moveStartBall, offset arr_screen, 1
 			call showNextBall, 0
-			call displayString, offset nextball_msg, 02h, 04h
+			call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+			call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
 			jmp @@keyboardLoop
 		@@shootStartBall:
+			call showNextBall, 1 ; first call this function so that the restStartBall function can use the type of ball generated in this function
 			call shootStartBall, offset arr_screen
 			call resetStartBall, offset arr_screen
-			call showNextBall, 1
-			call displayString, offset nextball_msg, 02h, 04h
+			call showNextBall, 0
+			call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+			call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
 			jmp @@keyboardLoop
 
 	@@exit:
@@ -958,7 +976,6 @@ PROC main
 
 		call __keyb_uninstallKeyboardHandler
 
-		;call	waitForSpecificKeystroke, 001Bh
 		call	terminateProcess
 
 
@@ -998,6 +1015,7 @@ DATASEG
 	
 	nextBall_type dd 0
 	rand_seed   dd ?
+	
 
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
@@ -1018,62 +1036,86 @@ DATASEG
 				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 16
 
     ;Color Palette
-	palette	db 0,9,13
-			db 37,42,43
-			db 5,24,36
-			db 59,59,59
-			db 1,5,11
-			db 4,34,56
-			db 2,20,42
-			db 21,52,61
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 13,6,1
-			db 56,34,4
-			db 43,21,3
-			db 61,52,21
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 8,1,6
-			db 54,4,43
-			db 61,21,60
-			db 35,2,23
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 0,0,0
-			db 4,4,1
-			db 34,39,2
-			db 56,53,8
-			db 21,23,2
+	palette	db 9,8,13
+			db 50,37,27
+			db 30,15,32
+			db 37,24,22
+			db 19,12,23
+			db 27,28,37
+			db 40,19,37
+			db 23,16,25
+			db 28,17,14
+			db 57,53,42
+			db 43,38,49
+			db 62,62,62
+			db 51,28,48
+			db 46,28,20
+			db 47,45,52
+			db 56,45,33
+			db 1,2,3
+			db 1,31,55
+			db 1,14,36
+			db 15,46,59
+			db 1,21,43
+			db 1,9,21
+			db 11,41,58
+			db 7,27,45
+			db 1,13,25
+			db 24,55,62
+			db 5,20,29
+			db 1,26,50
+			db 1,23,47
+			db 4,35,56
+			db 18,49,60
+			db 1,3,7
+			db 1,3,2
+			db 1,34,2
+			db 7,50,1
+			db 31,60,17
+			db 11,55,2
+			db 1,19,2
+			db 23,58,11
+			db 5,43,1
+			db 2,7,1
+			db 4,25,1
+			db 5,47,1
+			db 40,62,24
+			db 10,29,5
+			db 12,45,7
+			db 2,23,1
+			db 1,38,2
+			db 4,3,1
+			db 55,31,1
+			db 38,15,1
+			db 59,46,15
+			db 21,9,1
+			db 48,24,1
+			db 58,41,11
+			db 28,13,1
+			db 19,8,1
+			db 62,55,24
+			db 29,20,5
+			db 51,27,1
+			db 43,21,1
+			db 56,35,4
+			db 45,27,7
+			db 60,49,18
+			db 4,1,3
+			db 49,1,35
+			db 59,15,55
+			db 25,1,17
+			db 56,1,43
+			db 51,1,38
+			db 29,5,25
+			db 21,1,22
+			db 36,1,22
+			db 58,11,51
+			db 61,24,62
+			db 43,1,29
+			db 45,7,35
+			db 60,18,55
+			db 56,4,46
+			db 55,1,42
 
     ; Files
 	bgfile				db "bg.bin", 0
@@ -1089,6 +1131,7 @@ DATASEG
 	
     ; Game Messages
 	nextball_msg	db "Next:", 13, 10, '$'
+	score_msg 		db "Score:", 13, 10, '$'
 	
 ; -------------------------------------------------------------------
 ; STACK
