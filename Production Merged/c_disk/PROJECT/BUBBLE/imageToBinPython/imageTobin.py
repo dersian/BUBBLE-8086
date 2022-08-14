@@ -18,10 +18,10 @@ def printColors6(colorList):
     for color in colors6:
         print("db "+str(color[0])+","+str(color[1])+","+str(color[2]))
         
-def printColorSpace(amount):
-    colorsSpace = []
-    for i in range(amount):
-        print("db 0,0,0")
+#def printColorSpace(amount):
+#    colorsSpace = []
+#    for i in range(amount):
+#        print("db 0,0,0")
 
 #background
 with Image.open('Images/Background/bg_R_4bit.png') as im:
@@ -68,7 +68,6 @@ with Image.open('Images/Assets/greenball_4bit.png') as im:
 greenball_8bitpalette = [(7,14,8),(7,137,10),(31,203,7),(127,241,70),(44,223,9),(7,79,8),(93,235,45),(20,173,7),(8,28,7),(16,103,7),(23,191,7),(160,249,96),(43,119,23),(51,182,31),(11,92,7),(7,152,10)] # 16 color green ball
 printColors6(greenball_8bitpalette)
 #printColorSpace(12)
-
 
 #yellow ball
 with Image.open('Images/Assets/yellowball_4bit.png') as im:

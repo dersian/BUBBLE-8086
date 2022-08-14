@@ -37,6 +37,22 @@ NEXTBALL_MSG_X EQU 02h
 NEXTBALL_MSG_Y EQU 11h
 SCORE_MSG_X EQU 02h
 SCORE_MSG_Y EQU 0Ch
+MAINMENU_MSG1_X EQU 0Eh
+MAINMENU_MSG1_Y EQU 07h
+MAINMENU_MSG2_X EQU 09h
+MAINMENU_MSG2_Y EQU 0Ah
+MAINMENU_MSG3_X EQU 0Ah
+MAINMENU_MSG3_Y EQU 0Ch
+ENDGAME_MSG1_X EQU 0Eh
+ENDGAME_MSG1_Y EQU 06h
+ENDGAME_MSG2_X EQU 0Eh
+ENDGAME_MSG2_Y EQU 06h
+ENDGAME_MSG3_X EQU 0Eh
+ENDGAME_MSG3_Y EQU 09h
+ENDGAME_MSG4_X EQU 08h
+ENDGAME_MSG4_Y EQU 0Eh
+ENDGAME_MSG5_X EQU 0Ch
+ENDGAME_MSG5_Y EQU 11h
 
 ; Random
 RAND_A = 1103515245
@@ -135,7 +151,7 @@ PROC initialize
 	call __keyb_installKeyboardHandler
 
 	call setVideoMode, 13h
-	call updateColourPalette, 54 , offset palette
+	call updateColourPalette, 80 , offset palette
 	;open, read and draw background
 	call openFile, offset bgfile, offset bghandle
 	call readChunk, FRAMESIZE, offset bghandle, offset bgframe
@@ -638,6 +654,8 @@ PROC resetStartBall
 	USES eax, ebx, ecx, edx, edi
 	
 	mov esi, [@@arr]
+	mov ebx, [nextBall_type]
+	mov [startBall_type], ebx
 	call updateArray, esi, [startBall_pos], [nextBall_type], 1
 
 	ret
@@ -931,45 +949,79 @@ PROC main
 	; initialize starting parameters
 	mov [startBall_pos], SHOOTBALL_STARTPOS
 	mov [startBall_type], SHOOTBALL_STARTTYPE
-	call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
-	call showNextBall, 1
-	call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
-	call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
-	;call timer, TIMER_CTE
 	
-	@@keyboardLoop:
-		mov al, [__keyb_rawScanCode] ;last pressed key
-		cmp al, 4Bh ; left arow key
-		je @@moveStartBallLeft
-		cmp al, 4Dh ; right arrow key
-		je @@moveStartBallRight
-		cmp al, 39h ; space key
-		je @@shootStartBall
-		cmp al, 01h ; escape key
-		je @@exit
-		jmp @@keyboardLoop
+	@@mainMenu:
+		call drawBackground, offset buffer, offset bgframe 
+		call refreshVideo
+		call displayString, offset main_menu_msg1, MAINMENU_MSG1_X, MAINMENU_MSG1_Y
+		call displayString, offset main_menu_msg2, MAINMENU_MSG2_X, MAINMENU_MSG2_Y
+		call displayString, offset main_menu_msg3, MAINMENU_MSG3_X, MAINMENU_MSG3_Y
+		@@mm_keyboardLoop:
+			mov al, [__keyb_rawScanCode] ;last pressed key
+			cmp al, 39h ; space key
+			je @@gameLoop
+			cmp al, 01h ; escape key
+			je @@exit
+			jmp @@mm_keyboardLoop
 
-		@@moveStartBallLeft:
-			call moveStartBall, offset arr_screen, 0
-			call showNextBall, 0
-			call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
-			call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
-			;call timer, TIMER_CTE
+	@@gameLoop:
+		mov [__keyb_rawScanCode], 0 ; clear last pressed key so that the game doesn't directly start to play
+		call updateArray, offset arr_screen, [startBall_pos], 1, 0 ; place the startball on the grid
+		call showNextBall, 1
+		call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+		call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+		;call timer, TIMER_CTE
+
+		@@keyboardLoop:
+			mov al, [__keyb_rawScanCode] ;last pressed key
+			cmp al, 4Bh ; left arow key
+			je @@moveStartBallLeft
+			cmp al, 4Dh ; right arrow key
+			je @@moveStartBallRight
+			cmp al, 39h ; space key
+			je @@shootStartBall
+			cmp al, 01h ; escape key
+			je @@endGame
 			jmp @@keyboardLoop
-		@@moveStartBallRight:
-			call moveStartBall, offset arr_screen, 1
-			call showNextBall, 0
-			call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
-			call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
-			jmp @@keyboardLoop
-		@@shootStartBall:
-			call showNextBall, 1 ; first call this function so that the restStartBall function can use the type of ball generated in this function
-			call shootStartBall, offset arr_screen
-			call resetStartBall, offset arr_screen
-			call showNextBall, 0
-			call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
-			call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
-			jmp @@keyboardLoop
+
+			@@moveStartBallLeft:
+				call moveStartBall, offset arr_screen, 0
+				call showNextBall, 0
+				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+				;call timer, TIMER_CTE
+				jmp @@keyboardLoop
+			@@moveStartBallRight:
+				call moveStartBall, offset arr_screen, 1
+				call showNextBall, 0
+				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+				jmp @@keyboardLoop
+			@@shootStartBall:
+				call showNextBall, 1 ; first call this function so that the restStartBall function can use the type of ball generated in this function
+				call shootStartBall, offset arr_screen
+				call resetStartBall, offset arr_screen
+				call showNextBall, 0
+				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
+				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+				jmp @@keyboardLoop
+
+	@@endGame:	
+		mov [__keyb_rawScanCode], 0
+		call drawBackground, offset buffer, offset bgframe 
+		call refreshVideo
+		; 2 options: game finished with balls remaining or game finished with 0 balls
+		call displayString, offset end_game_msg1, ENDGAME_MSG1_X, ENDGAME_MSG1_Y
+		call displayString, offset end_game_msg3, ENDGAME_MSG3_X, ENDGAME_MSG3_Y
+		call displayString, offset end_game_msg4, ENDGAME_MSG4_X, ENDGAME_MSG4_Y
+		call displayString, offset end_game_msg5, ENDGAME_MSG5_X, ENDGAME_MSG5_Y
+		@@eg_keyboardLoop:
+			mov al, [__keyb_rawScanCode] ;last pressed key
+			cmp al, 39h ; space key
+			je @@gameLoop
+			cmp al, 01h ; escape key
+			je @@exit
+			jmp @@eg_keyboardLoop
 
 	@@exit:
 		call refreshVideo
@@ -1120,7 +1172,7 @@ DATASEG
     ; Files
 	bgfile				db "bg.bin", 0
 	blueballfile		db "blueball.bin", 0
-	greenballfile		db "blueball.bin", 0
+	greenballfile		db "boost.bin", 0
 	yellowballfile		db "blueball.bin", 0
 	pinkballfile		db "blueball.bin", 0
 
@@ -1130,8 +1182,16 @@ DATASEG
 	closeErrorMsg 	db "error during file closing", 13, 10, '$'
 	
     ; Game Messages
+	main_menu_msg1 	db "Main Menu:", 13, 10, '$'
+	main_menu_msg2	db "Press Space to start", 13, 10, '$'
+	main_menu_msg3 	db "Press Esc to exit", 13, 10, '$'
 	nextball_msg	db "Next:", 13, 10, '$'
 	score_msg 		db "Score:", 13, 10, '$'
+	end_game_msg1	db "Game Over!", 13, 10, '$'
+	end_game_msg2	db "Well Done!", 13, 10, '$'
+	end_game_msg3	db "Balls Left:", 13, 10, '$'
+	end_game_msg4	db "Press Space to play again", 13, 10, '$'
+	end_game_msg5	db "Press Esc to exit", 13, 10, '$'
 	
 ; -------------------------------------------------------------------
 ; STACK
