@@ -728,7 +728,7 @@ PROC displayString2
 	RET
 ENDP displayString2
 
-PROC drawScore
+PROC updateBall_amnt
 	USES edi,edx,eax, ebx, ecx
 	mov ah,02h	;set cursor position
 	mov bh,00h	;page number
@@ -736,7 +736,7 @@ PROC drawScore
 	mov dl,013h	;column
 	int 10h
 	
-	mov eax,[skore]
+	mov eax, [ball_amnt]
 	mov	ebx, 10		; divider
 	xor ecx, ecx	; counter for digits to be printed
 
@@ -758,7 +758,13 @@ PROC drawScore
 	loop @@printDigits	; Until digit counter = 0.
 
 	ret
-ENDP drawScore
+ENDP updateBall_amnt
+
+PROC decBall_amnt
+	sub [ball_amnt] , 1
+	
+	ret 
+ENDP decBall_amnt
 
 ; -------------------------------------------------------------------
 ; MAIN
@@ -782,6 +788,8 @@ PROC main
 	;call displayString2, offset score, 01h ,07h
 
 	@@keyboardLoop:
+		call updateBall_amnt
+
 		;call displayString2, offset score,01h,07h
 		mov al, [__keyb_rawScanCode] ;last pressed key
 		cmp al, 02h ; left arow key
@@ -796,7 +804,7 @@ PROC main
 
 		@@moveStartBallLeft:
 			;call incScore, offset score
-			call drawScore
+			call decBall_amnt
 			call moveStartBall, offset arr_screen, 0
 			jmp @@keyboardLoop
 		@@moveStartBallRight:
@@ -844,7 +852,7 @@ DATASEG
     f ball <,,>
 	
 	score 	db 57,57, '$'
-	skore dd 244
+	ball_amnt dd 7
 
 	ball_hit dd 0
 	

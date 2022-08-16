@@ -6,10 +6,10 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 INCLUDE "keyb.inc"
 
 
-ARR_X equ 32
-ARR_Y equ 16
+ARR_X equ 8
+ARR_Y equ 4
 ARR_LEN equ ARR_X*ARR_Y
-ARR_WHITE equ 9 ;amount of non filled lines
+ARR_WHITE equ 0 ;amount of non filled lines
 
 RAND_A = 1103515245
 RAND_C = 12345
