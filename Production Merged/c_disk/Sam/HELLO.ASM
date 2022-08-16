@@ -5,9 +5,11 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
 INCLUDE "keyb.inc"
 
-ARR_LEN equ 800
-ARR_X equ 40
-ARR_Y equ 20
+
+ARR_X equ 32
+ARR_Y equ 16
+ARR_LEN equ ARR_X*ARR_Y
+ARR_WHITE equ 9 ;amount of non filled lines
 
 RAND_A = 1103515245
 RAND_C = 12345
@@ -119,7 +121,7 @@ PROC StartGrid
 		xor edx, edx  ;ctr for inner
 		inc eax
 		inc edi
-		cmp eax, ARR_Y + 1
+		cmp eax, ARR_Y - ARR_WHITE ;fi
 		je @@done
 		
 		cmp edi, 2  ;time for offset
