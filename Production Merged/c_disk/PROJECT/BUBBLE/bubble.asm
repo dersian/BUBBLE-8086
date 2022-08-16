@@ -17,7 +17,7 @@ FRAMESIZE EQU FRAMEHEIGHT*FRAMEWIDTH
 ARRWIDTH EQU 32
 ARRHEIGHT EQU 16
 ARRLEN EQU ARRWIDTH*ARRHEIGHT
-ARRWHITE EQU 9
+ARRWHITE EQU 8
 
 ; Ball Drawing
 XOFFSET EQU 6
@@ -54,6 +54,12 @@ ENDGAME_MSG4_X EQU 08h
 ENDGAME_MSG4_Y EQU 0Eh
 ENDGAME_MSG5_X EQU 0Ch
 ENDGAME_MSG5_Y EQU 11h
+
+; Score
+SCORE_X EQU 04h
+SCORE_Y EQU 0Eh
+SCORE_END_X EQU 13h
+SCORE_END_Y EQU 0Bh
 
 ; Random
 RAND_A = 1103515245
@@ -554,6 +560,7 @@ PROC removeBall
 	call showNextBall, 0
 	call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 	call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+	call updateScore, SCORE_X, SCORE_Y
 	call timer, TIMER_CTE
 	call refreshVideo
 
@@ -905,6 +912,45 @@ PROC displayString
 	INT 21H 			; raise interrupt
 	RET
 ENDP displayString
+
+PROC updateScore
+	ARG @@x:byte, @@y:byte
+	USES edi,edx,eax, ebx, ecx
+	mov ah,02h	;set cursor position
+	mov bh,00h	;page number
+	mov dh, [@@y] ;row
+	mov dl, [@@x]	;column
+	int 10h
+	
+	mov eax, [score]
+	mov	ebx, 10		; divider
+	xor ecx, ecx	; counter for digits to be printed
+
+	; Store digits on stack
+	@@getNextDigit:
+	inc	ecx         ; increase digit counter
+	xor edx, edx
+	div	ebx   		; divide by 10
+	push dx			; store remainder on stack
+	test eax, eax	; {cmp eax, 0} check whether zero?
+	jnz	@@getNextDigit
+
+    ; Write all digits to the standard output
+	mov	ah, 2h 		; Function for printing single characters.
+	@@printDigits:		
+	pop dx
+	add	dl,'0'      	; Add 30h => code for a digit in the ASCII table, ...
+	int	21h            	; Print the digit to the screen, ...
+	loop @@printDigits	; Until digit counter = 0.
+
+	ret
+ENDP updateScore
+
+PROC decScore
+	sub [score] , 1
+	
+	ret 
+ENDP decScore
 ; -------------------------------------------------------------------
 ; FILE PROCEDURES
 ; -------------------------------------------------------------------
@@ -996,7 +1042,6 @@ PROC terminateProcess
 	
 	ret
 ENDP terminateProcess
-
 ; -------------------------------------------------------------------
 ; MAIN
 ; -------------------------------------------------------------------
@@ -1013,7 +1058,7 @@ PROC main
 	; initialize starting parameters
 	mov [startBall_pos], SHOOTBALL_STARTPOS
 	mov [startBall_type], SHOOTBALL_STARTTYPE
-	call fillArray, offset arr_screen, offset color1, offset color2
+	call fillArray, offset arrlen, offset color1, offset color2
 	
 	@@mainMenu:
 		call drawBackground, offset buffer, offset bgframe 
@@ -1035,9 +1080,14 @@ PROC main
 		call showNextBall, 1
 		call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 		call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+		call updateScore, SCORE_X, SCORE_Y
 		;call timer, TIMER_CTE
 
 		@@keyboardLoop:
+			; end game is score is 0
+			cmp [score], 0
+			je @@endGame
+
 			mov al, [__keyb_rawScanCode] ;last pressed key
 			cmp al, 4Bh ; left arow key
 			je @@moveStartBallLeft
@@ -1054,6 +1104,7 @@ PROC main
 				call showNextBall, 0
 				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+				call updateScore, SCORE_X, SCORE_Y
 				;call timer, TIMER_CTE
 				jmp @@keyboardLoop
 			@@moveStartBallRight:
@@ -1061,14 +1112,17 @@ PROC main
 				call showNextBall, 0
 				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+				call updateScore, SCORE_X, SCORE_Y
 				jmp @@keyboardLoop
 			@@shootStartBall:
+				call decScore
 				call showNextBall, 1 ; first call this function so that the restStartBall function can use the type of ball generated in this function
 				call shootStartBall, offset arr_screen
 				call resetStartBall, offset arr_screen
 				call showNextBall, 0
 				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
+				call updateScore, SCORE_X, SCORE_Y
 				jmp @@keyboardLoop
 
 	@@endGame:	
@@ -1077,6 +1131,7 @@ PROC main
 		call refreshVideo
 		; 2 options: game finished with balls remaining or game finished with 0 balls
 		call displayString, offset end_game_msg1, ENDGAME_MSG1_X, ENDGAME_MSG1_Y
+		call updateScore, SCORE_END_X, SCORE_END_Y
 		call displayString, offset end_game_msg3, ENDGAME_MSG3_X, ENDGAME_MSG3_Y
 		call displayString, offset end_game_msg4, ENDGAME_MSG4_X, ENDGAME_MSG4_Y
 		call displayString, offset end_game_msg5, ENDGAME_MSG5_X, ENDGAME_MSG5_Y
@@ -1137,6 +1192,8 @@ DATASEG
 	color1 dd 2
 	color2 dd 3
 	
+	score dd 2
+	
 	; Current Screen Buffer(32x16) (0's represent space between balls)
 	;arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
 	;			dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
@@ -1154,6 +1211,7 @@ DATASEG
 	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 14
 	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 15
 	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 16
+	arrlen dd ARRLEN
 	arr_screen dd ARRLEN dup(?)
 
 
@@ -1242,9 +1300,9 @@ DATASEG
     ; Files
 	bgfile				db "bg.bin", 0
 	blueballfile		db "blueball.bin", 0
-	greenballfile		db "boost.bin", 0
-	yellowballfile		db "blueball.bin", 0
-	pinkballfile		db "blueball.bin", 0
+	greenballfile		db "flappy.bin", 0
+	yellowballfile		db "life.bin", 0
+	pinkballfile		db "boost.bin", 0
 
     ; Error Messages
 	openErrorMsg 	db "could not open file", 13, 10, '$'
@@ -1257,6 +1315,7 @@ DATASEG
 	main_menu_msg3 	db "Press Esc to exit", 13, 10, '$'
 	nextball_msg	db "Next:", 13, 10, '$'
 	score_msg 		db "Score:", 13, 10, '$'
+	score_value		db 57,57, '$'
 	end_game_msg1	db "Game Over!", 13, 10, '$'
 	end_game_msg2	db "Well Done!", 13, 10, '$'
 	end_game_msg3	db "Balls Left:", 13, 10, '$'
