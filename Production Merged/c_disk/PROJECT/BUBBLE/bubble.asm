@@ -17,6 +17,7 @@ FRAMESIZE EQU FRAMEHEIGHT*FRAMEWIDTH
 ARRWIDTH EQU 32
 ARRHEIGHT EQU 16
 ARRLEN EQU ARRWIDTH*ARRHEIGHT
+ARRWHITE EQU 9
 
 ; Ball Drawing
 XOFFSET EQU 6
@@ -212,6 +213,16 @@ PROC randomType
 
 	ret
 ENDP randomType
+
+PROC addColor
+	uses eax
+	
+	call    rand16
+
+	mov ecx, eax
+
+	ret
+ENDP addColor
 ; -------------------------------------------------------------------
 ; TIMING
 ; -------------------------------------------------------------------
@@ -265,9 +276,61 @@ PROC waitForSpecificKeystroke
 	ret
 ENDP waitForSpecificKeystroke
 ; -------------------------------------------------------------------
-; STARTING SCREEN
+; STARTING GRID
 ; -------------------------------------------------------------------
+PROC fillArray
+	ARG	@@arrayptr:dword , @@color1:dword, @@color2:dword
+	USES eax, ebx, ecx, edx, esi, edi
+	
+	xor eax, eax  ;ctr for outer
+	mov esi, [@@arrayptr] ;pointer
+	xor edx, edx  ;ctr for inner
+	xor ebx, ebx  ;ctr for alternating 1 0
+	xor edi, edi  ;ctr for alternating offset
 
+	@@outer: 
+		xor edx, edx  ;ctr for inner
+		inc eax
+		inc edi
+		cmp eax, ARRHEIGHT - ARRWHITE ;fi
+		je @@done
+		
+		cmp edi, 2  ;time for offset
+		je @@blockoffset
+
+		jmp @@noOffset
+	@@inner:	   
+		cmp edx, ARRWIDTH 
+		je @@outer
+		
+		add esi, 4
+		cmp ebx, 0
+		je @@addColor
+				
+		xor ebx, ebx
+		inc edx
+		jmp @@inner
+	
+	@@noOffset:
+		mov ebx, 0
+		jmp @@inner
+	
+	@@blockoffset:
+		mov ebx, 1
+		xor edi, edi
+		jmp @@inner
+
+	@@addColor:
+		call addColor
+		
+		mov [esi], ecx ;update array
+		inc ebx
+		inc edx
+		jmp @@inner
+	
+	@@done:
+		ret
+ENDP fillArray
 ; -------------------------------------------------------------------
 ; DRAWING PROCEDURES
 ; -------------------------------------------------------------------
@@ -946,9 +1009,11 @@ PROC main
 	
 	call initialize
 
+	@@startGame:
 	; initialize starting parameters
 	mov [startBall_pos], SHOOTBALL_STARTPOS
 	mov [startBall_type], SHOOTBALL_STARTTYPE
+	call fillArray, offset arr_screen, offset color1, offset color2
 	
 	@@mainMenu:
 		call drawBackground, offset buffer, offset bgframe 
@@ -1018,7 +1083,7 @@ PROC main
 		@@eg_keyboardLoop:
 			mov al, [__keyb_rawScanCode] ;last pressed key
 			cmp al, 39h ; space key
-			je @@gameLoop
+			je @@startGame
 			cmp al, 01h ; escape key
 			je @@exit
 			jmp @@eg_keyboardLoop
@@ -1068,24 +1133,29 @@ DATASEG
 	nextBall_type dd 0
 	rand_seed   dd ?
 	
-
+	shiftedRow dd 0
+	color1 dd 2
+	color2 dd 3
+	
 	; Current Screen Buffer(32x16) (0's represent space between balls)
-	arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
-				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
-				dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
-				dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2 ; row 4
-				dd 2, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0 ; row 5
-				dd 0, 2, 0, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
-				dd 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0 ; row 7
-				dd 0, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1 ; row 8
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 12
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 13
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 14
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 15
-				dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 16
+	;arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
+	;			dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
+	;			dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
+	;			dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2 ; row 4
+	;			dd 2, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0 ; row 5
+	;			dd 0, 2, 0, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0, 2 ; row 6
+	;			dd 2, 0, 2, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0 ; row 7
+	;			dd 0, 1, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1 ; row 8
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 9
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 10
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 11
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 12
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 13
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 14
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 15
+	;			dd 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ; row 16
+	arr_screen dd ARRLEN dup(?)
+
 
     ;Color Palette
 	palette	db 9,8,13
