@@ -57,7 +57,7 @@ printColors6(blueball_8bitpalette)
 with Image.open('Images/Assets/greenball_4bit.png') as im:
     px = im.load()
     pixels=[]
-    with open("Images/greenball.bin","wb") as file:
+    with open("Images/grball.bin","wb") as file:
         for y in range(8):
             for x in range(8):
                 pixels.append(px[x,y]+32)
@@ -69,11 +69,12 @@ greenball_8bitpalette = [(7,14,8),(7,137,10),(31,203,7),(127,241,70),(44,223,9),
 printColors6(greenball_8bitpalette)
 #printColorSpace(12)
 
+
 #yellow ball
 with Image.open('Images/Assets/yellowball_4bit.png') as im:
     px = im.load()
     pixels=[]
-    with open("Images/yellowball.bin","wb") as file:
+    with open("Images/ywball.bin","wb") as file:
         for y in range(8):
             for x in range(8):
                 pixels.append(px[x,y]+48)

@@ -893,6 +893,38 @@ PROC showNextBall
 		call refreshVideo
 		ret
 ENDP showNextBall
+
+PROC checkEndGame
+	uses ebx, ecx, esi
+	
+	xor ecx, ecx
+	xor ebx, ebx
+	mov [grid_empty], 1 ; start with true, becomes false if there is still a ball left on the grid
+	; first check if the score is 0 or not
+	cmp [score], 0
+	je @@scoreZero
+	mov [score_empty], 0
+	jmp @@checkGrid
+
+	@@scoreZero:
+		mov [score_empty], 1
+		mov [grid_empty], 0
+		jmp @@done
+
+	@@checkGrid:
+		mov ebx, [dword ptr (esi + ecx*4)]
+		cmp ebx, 0
+		jne @@notEmpty
+		inc ecx
+		jmp @@checkGrid
+		
+		@@notEmpty:
+			mov [grid_empty], 0
+			jmp @@done
+
+	@@done:
+		ret
+ENDP checkEndGame
 ; -------------------------------------------------------------------
 ; SCORE PROCEDURES
 ; -------------------------------------------------------------------
@@ -1084,8 +1116,11 @@ PROC main
 		;call timer, TIMER_CTE
 
 		@@keyboardLoop:
-			; end game is score is 0
-			cmp [score], 0
+			; chekck if game is finished -> 2 options: score is 0 or grid is empty
+			call checkEndGame
+			cmp [score_empty], 1
+			je @@endGame
+			cmp [grid_empty], 1
 			je @@endGame
 
 			mov al, [__keyb_rawScanCode] ;last pressed key
@@ -1130,11 +1165,27 @@ PROC main
 		call drawBackground, offset buffer, offset bgframe 
 		call refreshVideo
 		; 2 options: game finished with balls remaining or game finished with 0 balls
-		call displayString, offset end_game_msg1, ENDGAME_MSG1_X, ENDGAME_MSG1_Y
-		call updateScore, SCORE_END_X, SCORE_END_Y
-		call displayString, offset end_game_msg3, ENDGAME_MSG3_X, ENDGAME_MSG3_Y
-		call displayString, offset end_game_msg4, ENDGAME_MSG4_X, ENDGAME_MSG4_Y
-		call displayString, offset end_game_msg5, ENDGAME_MSG5_X, ENDGAME_MSG5_Y
+		cmp [score_empty], 1
+		je @@scoreZeroFinish
+		cmp [grid_empty], 1
+		je @@gridEmptyFinish
+		
+		@@scoreZeroFinish:
+			call displayString, offset end_game_msg1, ENDGAME_MSG1_X, ENDGAME_MSG1_Y
+			call updateScore, SCORE_END_X, SCORE_END_Y
+			call displayString, offset end_game_msg3, ENDGAME_MSG3_X, ENDGAME_MSG3_Y
+			call displayString, offset end_game_msg4, ENDGAME_MSG4_X, ENDGAME_MSG4_Y
+			call displayString, offset end_game_msg5, ENDGAME_MSG5_X, ENDGAME_MSG5_Y
+			jmp @@eg_keyboardLoop
+		
+		@@gridEmptyFinish:
+			call displayString, offset end_game_msg1, ENDGAME_MSG1_X, ENDGAME_MSG1_Y
+			call displayString, offset end_game_msg2, ENDGAME_MSG2_X, ENDGAME_MSG2_Y
+			call displayString, offset end_game_msg3, ENDGAME_MSG3_X, ENDGAME_MSG3_Y
+			call displayString, offset end_game_msg4, ENDGAME_MSG4_X, ENDGAME_MSG4_Y
+			call displayString, offset end_game_msg5, ENDGAME_MSG5_X, ENDGAME_MSG5_Y
+			jmp @@eg_keyboardLoop
+
 		@@eg_keyboardLoop:
 			mov al, [__keyb_rawScanCode] ;last pressed key
 			cmp al, 39h ; space key
@@ -1192,9 +1243,11 @@ DATASEG
 	color1 dd 2
 	color2 dd 3
 	
-	score dd 2
+	score dd 32
+	score_empty dd 0
+	grid_empty dd 0
 	
-	; Current Screen Buffer(32x16) (0's represent space between balls)
+	; Current Screen Buffer(32x16) (0's represent space between balls
 	;arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
 	;			dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
 	;			dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
@@ -1300,9 +1353,9 @@ DATASEG
     ; Files
 	bgfile				db "bg.bin", 0
 	blueballfile		db "blueball.bin", 0
-	greenballfile		db "flappy.bin", 0
-	yellowballfile		db "life.bin", 0
-	pinkballfile		db "boost.bin", 0
+	greenballfile		db "grball.bin", 0
+	yellowballfile		db "ywball.bin", 0
+	pinkballfile		db "pinkball.bin", 0
 
     ; Error Messages
 	openErrorMsg 	db "could not open file", 13, 10, '$'
