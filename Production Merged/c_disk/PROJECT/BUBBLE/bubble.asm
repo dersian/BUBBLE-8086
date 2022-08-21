@@ -17,7 +17,7 @@ FRAMESIZE EQU FRAMEHEIGHT*FRAMEWIDTH
 ARRWIDTH EQU 32
 ARRHEIGHT EQU 16
 ARRLEN EQU ARRWIDTH*ARRHEIGHT
-ARRWHITE EQU 8
+ARRWHITE EQU 8 ; Amount of white spaces
 
 ; Ball Drawing
 XOFFSET EQU 6
@@ -30,7 +30,6 @@ BALL_YSTART EQU 5
 NEXTBALL_X EQU 30
 NEXTBALL_Y EQU 150
 SHOOTBALL_STARTPOS EQU 496 ; Absolute starting position of the shooting ball
-SHOOTBALL_STARTX EQU 15 ; Starting xcord of the shooting ball
 SHOOTBALL_STARTTYPE EQU 1 ; Starting ball type of the shooting ball
 
 ; Message Positions
@@ -154,9 +153,10 @@ ENDP updateColourPalette
 ; INITIALIZING
 ; -------------------------------------------------------------------
 PROC initialize 
+	; random and keyboard 
 	call rand_init
 	call __keyb_installKeyboardHandler
-
+	; set videomode and update coulour palette
 	call setVideoMode, 13h
 	call updateColourPalette, 80 , offset palette
 	;open, read and draw background
@@ -180,7 +180,6 @@ ENDP initialize
 ; -------------------------------------------------------------------
 PROC rand_init
     USES    eax, ecx, edx
-
     mov     ah, 02ch        ; Get system time
     int     21h
     mov     ax, dx          ; Use time to generate seed in EAX
@@ -192,13 +191,11 @@ PROC rand_init
     mov     cx, dx
     xor     eax, ecx 
     mov     [rand_seed], eax
-
     ret
 ENDP rand_init
 
 PROC rand16
     USES    edx
-
     mov     eax, [rand_seed]
     mov     edx, RAND_A
     mul     edx
@@ -206,27 +203,20 @@ PROC rand16
     mov     [rand_seed], eax
 	shr		eax, 30
     inc eax
-	
     ret
 ENDP rand16
 
 PROC randomType
-	uses eax
-	
+	uses eax	
 	call    rand16
-
 	mov [nextBall_type], eax
-
 	ret
 ENDP randomType
 
 PROC addColor
 	uses eax
-	
 	call    rand16
-
 	mov ecx, eax
-
 	ret
 ENDP addColor
 ; -------------------------------------------------------------------
@@ -379,26 +369,26 @@ PROC drawBall
 	add edi, eax				; destination pointer 
 	
 	mov ecx, BALLHEIGHT
-@@screenloop:
-	push ecx
-	mov ecx, BALLWIDTH
-	@@printLine:
-		mov	al, [ebx] ; index in the colour palette
-		cmp al, 4
-		je @@skip
-		jmp @@print
-		@@skip:
-		inc edi
-		jmp @@end
-		@@print:
-		stosb ; store pixel
-		@@end:
-		add ebx, 1 ; increment
-		loop @@printLine
-	mov edx, FRAMEWIDTH-BALLWIDTH		; move one row down in the video memory
-	add edi, edx
-	pop ecx
-	loop @@screenloop
+	@@loopi:
+		push ecx
+		mov ecx, BALLWIDTH
+		@@row:
+			mov	al, [ebx] ; index in the colour palette
+			cmp al, 4 ; color of the background
+			je @@skip
+			jmp @@print
+			@@skip:
+			inc edi
+			jmp @@end
+			@@print:
+			stosb ; store pixel
+			@@end:
+			add ebx, 1 ; increment
+			loop @@row
+		mov edx, FRAMEWIDTH-BALLWIDTH		; move one row down in the video memory
+		add edi, edx
+		pop ecx
+		loop @@loopi
 	
 	ret 
 ENDP drawBall
@@ -410,7 +400,6 @@ PROC decodeArray
 	ARG @@arr:dword
 	USES eax, ecx, esi, edx, ebx
 
-	;mov esi, [@@arr] ; store array (already stored in update proc)
 	mov ecx, 0
 	; reset cord
 	mov [f.x], BALL_XSTART
@@ -477,8 +466,6 @@ PROC updateArray
 	mov ecx, [@@position]
 	mov ebx, [@@ball_type]
 	; place the ball in the array
-	;call drawBackground, offset buffer, offset bgframe
-	;call timer, TIMER_CTE
 	mov [dword ptr (esi + ecx*4)], ebx
 	call decodeArray, [dword ptr esi]
 	call refreshVideo
@@ -488,8 +475,6 @@ PROC updateArray
 	
 	@@hitDetection:
 		mov [ball_hit], 0 ; reset global variable -> used to check if the played ball has hit any balls of the same type -> remove if yes
-		;xor ecx, ecx 
-		;mov ecx, edi ; put the position of the current ball in ecx
 		mov edx, [dword ptr (esi + ecx*4)] ; put the type of the played ball in ebx to pass it to the hitdetection function, refer to it as a pointer in the hitdetection function
 		xor edi, edi ; edi = orientation of hitdetection, clear it before passing to the function	
 		; if the position is max left or max right -> skip hit detection partially
@@ -540,23 +525,130 @@ PROC updateArray
 			je @@left
 			add ecx, 33 ; reset the position to the position of the played ball
 			call removeBall, ecx
+			jmp @@done
 
 			@@left:
-				;add ecx, 31
 				call removeBall, ecx
+				jmp @@done
+	
+	@@checkSolo: ; check if there are any free floating balls (bottom left to top right) -> need to be removed
+		xor ecx, ecx ; ball to check position 
+		mov ecx, 480 ; skip first and last row
+		xor ebx, ebx ; neighbouring balls to check position
+		@@nextBall:
+			sub ecx, 2 ; move 1 pos to the left
+			mov ebx, ecx
+			cmp ecx, 31 ; skip first row -> lower than 31? done
+			jbe @@done
+			mov edx, [dword ptr (esi + ecx*4)]
+			cmp edx, 0 ; skip if ball is zero
+			je @@nextBall
+			; check if we are at the max left or max right position
+			xor edx, edx ; clear edx for modulo
+			xor eax, eax
+			xor edi, edi
+			mov eax, ecx ; dividend
+			mov edi, 32 ; divisor
+			div edi ; divide ecx by eax (32)
+			cmp edx, 0; ecx is max left position? -> ex: 480/32 -> mod = 0
+			je @@max_left_pos
+			cmp edx , 31 ; ecx is max right position -> ex: 511/32 -> mod = 31
+			je @@max_right_pos
+			; check TL, TR, R, BR, BL, L
+			sub ebx, 33 ; TL
+			mov edx, [dword ptr (esi + ebx*4)]
+			cmp edx, 0
+			jne @@nextBall ; there is at least 1 neighbouring ball -> move to next ball
+			add ebx, 2 ; TR
+			mov edx, [dword ptr (esi + ebx*4)]
+			cmp edx, 0
+			jne @@nextBall
+			add ebx, 33 ; R
+			mov edx, [dword ptr (esi + ebx*4)]
+			cmp edx, 0
+			jne @@nextBall
+			add ebx, 31 ; BR
+			mov edx, [dword ptr (esi + ebx*4)]
+			cmp edx, 0
+			jne @@nextBall
+			sub ebx, 2 ; BL
+			mov edx, [dword ptr (esi + ebx*4)]
+			cmp edx, 0
+			jne @@nextBall
+			sub ebx, 33 ; L
+			mov edx, [dword ptr (esi + ebx*4)]
+			cmp edx, 0
+			jne @@nextBall
+			; no neighbouring balls -> remove current ball
+			call removeBall, ecx
+			jmp @@nextBall
+			
+			@@max_left_pos: ; don't check L, TL, BL
+				sub ebx, 31 ; TR
+				mov edx, [dword ptr (esi + ebx*4)]
+				cmp edx, 0
+				jne @@nextBall
+				add ebx, 33 ; R
+				mov edx, [dword ptr (esi + ebx*4)]
+				cmp edx, 0
+				jne @@nextBall
+				add ebx, 31 ; BR
+				mov edx, [dword ptr (esi + ebx*4)]
+				cmp edx, 0
+				jne @@nextBall
+
+				call removeBall, ecx
+				jmp @@nextBall
+
+			@@max_right_pos: ; don't check R, TR, BR
+				sub ebx, 33 ; TL
+				mov edx, [dword ptr (esi + ebx*4)]
+				cmp edx, 0
+				jne @@nextBall
+				add ebx, 31 ; L
+				mov edx, [dword ptr (esi + ebx*4)]
+				cmp edx, 0
+				jne @@nextBall
+				add ebx, 33 ; BL
+				mov edx, [dword ptr (esi + ebx*4)]
+				cmp edx, 0
+				jne @@nextBall
+				
+				call removeBall, ecx
+				jmp @@nextBall
+
 	@@done:
 		ret
 ENDP updateArray
+
+PROC clearArray
+	ARG @@arr:dword
+	USES ecx
+	
+	mov esi, [@@arr]
+
+	xor ecx, ecx
+	@@loopi:
+		cmp ecx, ARRLEN 
+		je @@done
+		mov [dword ptr (esi + ecx*4)], 0
+		inc ecx
+		jmp @@loopi
+
+	@@done:
+		mov [arr_screen], esi
+		ret
+ENDP clearArray
 
 PROC removeBall
 	ARG @@removepos:dword
 	USES esi, ecx
 	
-	mov ecx, [@@removepos]
+	mov ecx, [@@removepos] ; position of the to be removed ball
 	call drawBackground, offset buffer, offset bgframe 
 	call timer, TIMER_CTE
-	mov [dword ptr (esi + ecx*4)], 0 
-	call decodeArray, [dword ptr esi] 
+	mov [dword ptr (esi + ecx*4)], 0 ; place a 0 at the given position
+	call decodeArray, [dword ptr esi] ; redraw the grid
 	call showNextBall, 0
 	call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 	call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
@@ -616,6 +708,9 @@ PROC shootStartBall
 	; count the rows to go up
 	@@count_upper_rows:
 		sub ecx, 32
+		; check if we are at the first row -> if so we can't go higher
+		cmp ecx, 0
+		jb @@check_sides
 		mov edi, [dword ptr (esi + ecx*4)]
 		cmp edi, 0
 		ja @@check_sides ; jump if above
@@ -646,7 +741,6 @@ PROC shootStartBall
 		je @@set_shift_left
 		sub ebx, 1
 		jmp @@continue
-
 		; 2 possibilities (for max left ex, same for max right but opposite direction):
 		; case 1:
 		; 	1, 0, 2
@@ -691,7 +785,9 @@ PROC shootStartBall
 			call removeBall, ecx ; first remove ball
 			sub ecx, 32
 			call updateArray, esi, ecx, [startBall_type], 1 ; fill array with corresponding ball WITH hit detection enabled
-			dec ebx
+			cmp [ball_hit], 1 ; check if we hit a ball
+			je @@done
+			dec ebx ; dec the amount of rows still left
 			cmp ebx, 0
 			je @@check_shift
 			jmp @@up
@@ -906,12 +1002,12 @@ PROC checkEndGame
 	mov [score_empty], 0
 	jmp @@checkGrid
 
-	@@scoreZero:
+	@@scoreZero: ; check if score is zero
 		mov [score_empty], 1
 		mov [grid_empty], 0
 		jmp @@done
 
-	@@checkGrid:
+	@@checkGrid: ; check if grid is empty
 		mov ebx, [dword ptr (esi + ecx*4)]
 		cmp ebx, 0
 		jne @@notEmpty
@@ -1084,13 +1180,13 @@ PROC main
 	push ds
 	pop	es
 	
-	call initialize
+	call initialize ; initialize function containing the random, keyboard and file procedures
 
 	@@startGame:
 	; initialize starting parameters
 	mov [startBall_pos], SHOOTBALL_STARTPOS
 	mov [startBall_type], SHOOTBALL_STARTTYPE
-	call fillArray, offset arrlen, offset color1, offset color2
+	call fillArray, offset arrlen, offset color1, offset color2 ; make randomized grid
 	
 	@@mainMenu:
 		call drawBackground, offset buffer, offset bgframe 
@@ -1113,7 +1209,6 @@ PROC main
 		call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 		call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
 		call updateScore, SCORE_X, SCORE_Y
-		;call timer, TIMER_CTE
 
 		@@keyboardLoop:
 			; chekck if game is finished -> 2 options: score is 0 or grid is empty
@@ -1140,7 +1235,6 @@ PROC main
 				call displayString, offset nextball_msg, NEXTBALL_MSG_X, NEXTBALL_MSG_Y
 				call displayString, offset score_msg, SCORE_MSG_X, SCORE_MSG_Y
 				call updateScore, SCORE_X, SCORE_Y
-				;call timer, TIMER_CTE
 				jmp @@keyboardLoop
 			@@moveStartBallRight:
 				call moveStartBall, offset arr_screen, 1
@@ -1151,7 +1245,7 @@ PROC main
 				jmp @@keyboardLoop
 			@@shootStartBall:
 				call decScore
-				call showNextBall, 1 ; first call this function so that the restStartBall function can use the type of ball generated in this function
+				call showNextBall, 1 ; first call this function so that the resetStartBall function can use the type of ball generated in this function
 				call shootStartBall, offset arr_screen
 				call resetStartBall, offset arr_screen
 				call showNextBall, 0
@@ -1189,10 +1283,31 @@ PROC main
 		@@eg_keyboardLoop:
 			mov al, [__keyb_rawScanCode] ;last pressed key
 			cmp al, 39h ; space key
-			je @@startGame
+			je @@resetGame
 			cmp al, 01h ; escape key
 			je @@exit
 			jmp @@eg_keyboardLoop
+
+	@@resetGame:
+		; clear the array -> fill it with 0's
+		call clearArray, offset arr_screen
+		; reset values
+		mov [ball_hit], 0
+		mov [hitDetection_state], 0
+		mov [startBall_pos], 0
+		mov [startBall_type], 1
+		mov [upper_rows], 0
+		mov [nextBall_type], 0
+		mov [rand_seed], 0
+		mov [shiftedRow], 0
+		mov [score], 32
+		mov [score_empty], 0
+		mov [grid_empty], 0
+
+		call drawBackground, offset buffer, offset bgframe 
+		call refreshVideo
+
+		jmp @@startGame
 
 	@@exit:
 		call refreshVideo
@@ -1248,7 +1363,7 @@ DATASEG
 	grid_empty dd 0
 	
 	; Current Screen Buffer(32x16) (0's represent space between balls
-	;arr_screen 	dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
+	;arr_screen dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 1
 	;			dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1 ; row 2
 	;			dd 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0 ; row 3
 	;			dd 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 2 ; row 4
